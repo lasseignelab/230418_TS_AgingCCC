@@ -1,16 +1,18 @@
 FROM bioconductor/bioconductor_docker:RELEASE_3_16
 
-##----------------------------------------------------------------------------##
+###----------------------------------------------------------------------------##
 ##  R PACKAGES
 ##----------------------------------------------------------------------------##
 
 #### Leave the top line the same for each new project. Uncomment lines to add ####
 RUN R -e 'install.packages(c("tidyverse", "remotes",  "BiocManager", "devtools", "knitr", "lintr", "styler", "here", "markdown", "rmarkdown"))' \
-#  && R -e 'install.packages(c("< insert CRAN repos here >"))' \
-#  && R -e 'devtools::install_github("< insert GitHub repos here >")' \
-#  && R -e 'remotes::install_github("< insert GitHub repos here >")' \
-#  && R -e 'BiocManager::install(c("< insert Biconductor repos here >"))'
-
+  && R -e 'install.packages(c("ggplot2", "circlize", "reshape", "intergraph", "pheatmap", "clustree", "fields", "enrichR", "UpSetR", "scCustomize", "hdf5r", "rliger", "NMF", "gprofiler2", "GGally"))' \
+  && R -e 'devtools::install_github("saeyslab/nichenetr")' \
+  && R -e 'devtools::install_github("saezlab/liana")' \
+  && R -e 'devtools::install_github("eddelbuettel/harmony")' \
+  && R -e 'devtools::install_github("satijalab/sctransform", ref = "develop")' \
+  && R -e 'remotes::install_github(repo = "satijalab/seurat", ref = "develop")' \
+  && R -e 'BiocManager::install(c("STRINGdb", "Nebulosa", "DropletUtils", "dittoSeq", "glmGamPoi", "SummarizedExperiment", "ComplexHeatmap", "limma"))'
 
 ##----------------------------------------------------------------------------##
 ## SYSTEM PACKAGES
@@ -40,32 +42,32 @@ RUN apt-get install --yes \
   libgsl-dev
 
 RUN apt-get install -y \
-	wget \
-	unzip \
-	git
+        wget \
+        unzip \
+        git
 
 
 ##----------------------------------------------------------------------------##
 ## PYTHON PACKAGES
 ##----------------------------------------------------------------------------##
+  
 
+RUN pip3 install leidenalg
 
-# RUN pip3 install <Insert Python packages here>
-
-
+  
 ##----------------------------------------------------------------------------##
 ## 3RD PARTY PROGRAMS
 ##----------------------------------------------------------------------------##
-
+  
 #### Uncomment these lines if you need a conda env in your docker ####
-
+  
 # Install miniconda
 # ENV CONDA_DIR /opt/conda
 # RUN wget --quiet https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -O ~/miniconda.sh && \
 #     /bin/bash ~/miniconda.sh -b -p /opt/conda
 # ENV PATH=$CONDA_DIR/bin:$PATH
 
-
+        
 ##----------------------------------------------------------------------------##
 ## CONDA ENV
 ##----------------------------------------------------------------------------##
@@ -76,4 +78,3 @@ RUN apt-get install -y \
 #    conda env create -f opt/BLAZE-1.1.0/conda_env/environment.yml
 
 #SHELL ["conda", "run", "-n", "blaze", "/bin/bash", "-c"]
-
