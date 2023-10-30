@@ -6,7 +6,7 @@ output: html_document
 ---
 **Pre-processing of 3xTgAD mouse data**
 
-__Goal__: Process 3xTgAD (snRNA-seq) data for downstream analyses. The data consists of 2 time points (2 and 6 months), 2 conditions (AD, CTRL), and 1 sex (female).
+__Goal__: Process 3xTgAD (snRNA-seq) data for downstream analyses. The data consists of 2 time points (6 and 12 months), 2 conditions (AD, CTRL), and 1 sex (female).
   
 __Reproducibility__:
 * GitHub: lasseignelab/230418_TS_AgingCCC
@@ -56,7 +56,11 @@ source(here("src", "functions_CCCin3xTgAD.R"))
 
 # Create seurat object
 ```{r}
-merged_seurat <- make_seurat_object(here("data", "CellRangerCounts"))
+merged_seurat <- make_seurat_object(here(
+  "data",
+  "CellRangerCounts",
+  "post_soupX"
+))
 ```
 
 # Calculate QC metrics
@@ -67,7 +71,7 @@ merged_seurat <- calculate_qc(merged_seurat)
 # Format metadata
 ```{r}
 metadata <- format_metadata(merged_seurat)
-dim(metadata) # 204560 8
+dim(metadata) # 185643 9
 
 # Add metadata to merged_seurat
 merged_seurat@meta.data <- metadata
@@ -75,7 +79,7 @@ merged_seurat@meta.data <- metadata
 
 # Plot QC metrics
 ```{r warning=FALSE}
-pdf(file = here("results", "intermediate_outputs", "01_seurat", "qc_plots.pdf"))
+pdf(file = here("results", "intermediate_outputs", "02_seurat", "qc_plots.pdf"))
 plot_qc(metadata)
 dev.off()
 ```
@@ -112,19 +116,19 @@ filtered_seurat <- CreateSeuratObject(filtered_counts,
 
 # Save filtered seurat object
 ```{r}
-saveRDS(filtered_seurat, file = here("data", "filtered_seurat.rds"))
+saveRDS(filtered_seurat, file = here("data", "seurat", "filtered_seurat.rds"))
 ```
 
 # Plot QC metrics after filtering
 ```{r warning=FALSE}
 metadata <- filtered_seurat@meta.data
-dim(metadata) # 193605 11
+dim(metadata) # 194858 12
 
 # plot and save post-filter QC outputs
 pdf(file = here(
   "results",
   "intermediate_outputs",
-  "01_seurat",
+  "02_seurat",
   "qc_plots_filtered.pdf"
 ))
 plot_qc(metadata)
@@ -140,7 +144,7 @@ dev.off()
 pdf(file = here(
   "results",
   "intermediate_outputs",
-  "01_seurat",
+  "02_seurat",
   "cellcycle_pca.pdf"
 ))
 
@@ -154,12 +158,12 @@ dev.off()
 * We will have to provide the PCs from the elbow plot above (1:20)
 ```{r warning=FALSE}
 filtered_seurat <- harmony_integration(filtered_seurat, dims = 1:20)
-# harmony converged after 3 iterations
+# harmony converged after 10 iterations
 ```
 
 # Save integrated seurat object
 ```{r}
-saveRDS(filtered_seurat, file = here("data", "integrated_seurat.rds"))
+saveRDS(filtered_seurat, file = here("data", "seurat", "integrated_seurat.rds"))
 ```
 
 # Clustering
@@ -171,8 +175,8 @@ filtered_seurat@active.assay
 
 # vector of desired resolutions
 resolutions <- c(
-  0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9,
-  1.0, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9
+  0.5, 0.6, 0.7, 0.8, 0.9,
+  1.0, 1.1, 1.2, 1.3, 1.4, 1.5
 )
 
 # clustering of resolutions (answer no to miniconda installation)
@@ -185,7 +189,7 @@ filtered_seurat <- find_clusters(filtered_seurat,
 
 # Save clustered seurat object
 ```{r}
-saveRDS(filtered_seurat, file = here("data", "clustered_seurat.rds"))
+saveRDS(filtered_seurat, file = here("data", "seurat", "clustered_seurat.rds"))
 ```
 
 # Determine resolution
@@ -199,7 +203,7 @@ tree2 <- clustree(filtered_seurat@meta.data, prefix = "RNA_snn_res.1.")
 pdf(file = here(
   "results",
   "intermediate_outputs",
-  "01_seurat",
+  "02_seurat",
   "clustree_umap.pdf"
 ))
 
@@ -234,7 +238,7 @@ all_marker_genes <- FindAllMarkers(filtered_seurat,
 saveRDS(all_marker_genes, here(
   "results",
   "intermediate_outputs",
-  "01_seurat",
+  "02_seurat",
   "all_marker_genes.rds"
 ))
 
@@ -243,17 +247,17 @@ top25 <- all_marker_genes %>%
   group_by(cluster) %>%
   top_n(-25, p_val_adj)
 
-dim(top25) # 1534 7
+dim(top25) # 1074 7
 ```
 
 # Neuronal marker FeaturePlots
 * As no markers from PanglaoDB indicated whether Neurons are excitatory or inhibitory, I am using feature plots and known canonical markers to identify neuronal clusters as ex or in.
-* I was able to assign all neuron clusters as excitatory or inhibitory to most neuron clusters (cluster 9 and 16 excluded).
+* I was able to assign all neuron clusters as excitatory or inhibitory to most neuron clusters (cluster 4 excluded).
 ```{r}
 pdf(file = here(
   "results",
   "intermediate_outputs",
-  "01_seurat",
+  "02_seurat",
   "neurons_feature_plots.pdf"
 ))
 
@@ -269,10 +273,10 @@ dev.off()
 ```
 
 # Finding markers of unresolved clusters
-* Clusters unidentified are: 9, 15, 16, 21, 24, 30, 39, 43, 47
+* Clusters unidentified are: 15, 22, 35, 38
 ```{r}
 # vector of clusters of interest
-identities <- c("9", "15", "16", "21", "24", "30", "39", "43", "47")
+identities <- c("15", "22", "35", "38")
 
 # find marker genes across clusters of interest
 top_markers <- find_markers(filtered_seurat,
@@ -281,135 +285,60 @@ top_markers <- find_markers(filtered_seurat,
   value = 15
 )
 
-dim(top_markers) # 347 6
-```
-
-# Feature plots of unresolved clusters
-Clusters that remain unresolved:
-Cluster 16: Neurons vs Oligodendrocytes
-  * Based on below plots: Both, have to sub-cluster
-Cluster 24: Macrophages vs Epithelial cells
-  * Based on below plots: Unknown
-```{r warning=FALSE}
-pdf(file = here(
-  "results",
-  "intermediate_outputs",
-  "01_seurat",
-  "feature_plots.pdf"
-))
-
-# Labeled UMAP
-DimPlot(filtered_seurat, label = TRUE)
-
-# Cluster 16: Snap25 (Neurons) vs Mbp (Oligodendrocytes)
-FeaturePlot(filtered_seurat, features = c("Snap25", "Mbp"), label = TRUE)
-FeaturePlot(filtered_seurat, features = c("Snap25", "Mbp"), label = FALSE)
-
-# Cluster 24: Mrc1 (Macrophages) vs Cxcl12 (Epithelial cells)
-FeaturePlot(filtered_seurat, features = c("Mrc1", "Cxcl12"), label = TRUE)
-FeaturePlot(filtered_seurat, features = c("Mrc1", "Cxcl12"), label = FALSE)
-
-dev.off()
+dim(top_markers) # 60 6
 ```
 
 # Assign cell types
 ```{r}
 filtered_seurat <- RenameIdents(filtered_seurat,
-  `1`  = "Excitatory Neurons",
-  `2`  = "Astrocytes",
+  `1`  = "Astrocytes",
+  `2`  = "Excitatory Neurons",
   `3`  = "Oligodendrocytes",
   `4`  = "Inhibitory Neurons",
   `5`  = "Inhibitory Neurons",
-  `6`  = "Oligodendrocytes",
-  `7`  = "Inhibitory Neurons",
-  `8`  = "Excitatory Neurons",
-  `9`  = "Neurons",
+  `6`  = "Inhibitory Neurons",
+  `7`  = "Excitatory Neurons",
+  `8`  = "Oligodendrocytes",
+  `9`  = "Excitatory Neurons",
   `10` = "Excitatory Neurons",
   `11` = "Excitatory Neurons",
-  `12` = "Excitatory Neurons",
-  `13` = "OPCs",
-  `14` = "Inhibitory Neurons",
-  `15` = "Meningeal cells",
+  `12` = "OPCs",
+  `13` = "Inhibitory Neurons",
+  `14` = "Vasculature cells",
+  `15` = "Ependymal cells",
   `16` = "Oligodendrocytes",
-  `17` = "Astrocytes",
+  `17` = "Excitatory Neurons",
   `18` = "Microglia",
-  `19` = "Inhibitory Neurons",
-  `20` = "Excitatory Neurons",
-  `21` = "Epithelial cells",
-  `22` = "Inhibitory Neurons",
+  `19` = "Astrocytes",
+  `20` = "Inhibitory Neurons",
+  `21` = "Excitatory Neurons",
+  `22` = "Unknown",
   `23` = "Inhibitory Neurons",
-  `24` = "Unknown",
+  `24` = "Inhibitory Neurons",
   `25` = "Inhibitory Neurons",
-  `26` = "Inhibitory Neurons",
-  `27` = "Excitatory Neurons",
-  `28` = "Excitatory Neurons",
+  `26` = "Excitatory Neurons",
+  `27` = "Vasculature cells",
+  `28` = "Inhibitory Neurons",
   `29` = "Astrocytes",
-  `30` = "Vasculature cells",
+  `30` = "Excitatory Neurons",
   `31` = "Endothelial cells",
-  `32` = "Excitatory Neurons",
-  `33` = "OPCs",
-  `34` = "Inhibitory Neurons",
-  `35` = "Fibroblasts",
-  `36` = "Microglia",
-  `37` = "Excitatory Neurons",
-  `38` = "Excitatory Neurons",
-  `39` = "Retinal ganglion cells",
-  `40` = "Excitatory Neurons",
-  `41` = "Excitatory Neurons",
-  `42` = "Excitatory Neurons",
-  `43` = "Vasculature cells",
-  `44` = "OPCs",
-  `45` = "Inhibitory Neurons",
-  `46` = "Excitatory Neurons",
-  `47` = "Vasculature cells",
-  `48` = "OPCs"
+  `32` = "OPCs",
+  `33` = "Inhibitory Neurons",
+  `34` = "Excitatory Neurons",
+  `35` = "Vasculature cells",
+  `36` = "Excitatory Neurons",
+  `37` = "Microglia",
+  `38` = "Retinal ganglion cells",
+  `39` = "OPCs",
+  `40` = "Inhibitory Neurons",
+  `41` = "Vasculature cells",
+  `42` = "Excitatory Neurons"
 )
-```
-
-# Subclustering of cluster 9 
-```{r}
-# Subcluster the neuron cluster (cluster 9)
-filtered_seurat <- FindSubCluster(filtered_seurat,
-  cluster = "Neurons",
-  graph.name = "RNA_snn",
-  resolution = 0.1
-)
-
-# Set identity to resolution with sub clusters
-filtered_seurat <- SetIdent(filtered_seurat, value = "sub.cluster")
-
-# Sub-clusters for marker identification
-idents <- c("Neurons_0", "Neurons_1")
-
-# Find markers for sub-clusters
-neurons_markers <- find_markers(filtered_seurat,
-  resolution = "sub.cluster",
-  identities = idents,
-  value = 10
-)
-
-dim(neurons_markers) # 220 6
-
-# Assign new cell types
-filtered_seurat <- RenameIdents(filtered_seurat,
-  "Neurons_0" = "Inhibitory Neurons",
-  "Neurons_1" = "Excitatory Neurons"
-)
-
-# Check cluster assignments
-png(file = here(
-  "results",
-  "intermediate_outputs",
-  "01_seurat",
-  "UMAP_subcluster.png"
-))
-DimPlot(filtered_seurat)
-dev.off()
 ```
 
 # Plot final UMAP
 ```{r}
-png(file = here("results", "final_outputs", "01_seurat", "UMAP_final.png"))
+png(file = here("results", "final_outputs", "02_seurat", "UMAP_final.png"))
 DimPlot_scCustom(filtered_seurat,
   figure_plot = TRUE,
   label = FALSE,
@@ -420,7 +349,7 @@ dev.off()
 
 # Save processed seurat object
 ```{r}
-saveRDS(filtered_seurat, here("data", "processed_seurat.rds"))
+saveRDS(filtered_seurat, here("data", "seurat", "processed_seurat.rds"))
 ```
 
 # Session info
@@ -429,17 +358,19 @@ sessionInfo() # see output below
 ```
 R version 4.2.3 (2023-03-15)
 Platform: x86_64-pc-linux-gnu (64-bit)
-Running under: Ubuntu 22.04.2 LTS
+Running under: Ubuntu 22.04.3 LTS
 
 Matrix products: default
 BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
 LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
 
 locale:
- [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
- [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
- [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
-[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+ [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
 
 attached base packages:
 [1] stats     graphics  grDevices utils     datasets  methods   base     
@@ -450,65 +381,101 @@ other attached packages:
  [9] Rcpp_1.0.10        lubridate_1.9.2    forcats_1.0.0      stringr_1.5.0     
 [13] dplyr_1.1.1        purrr_1.0.1        readr_2.1.4        tidyr_1.3.0       
 [17] tibble_3.2.1       ggplot2_3.4.2      tidyverse_2.0.0    SeuratObject_4.1.3
-[21] Seurat_4.3.0.9002 
+[21] Seurat_4.3.0      
 
 loaded via a namespace (and not attached):
-  [1] utf8_1.2.3             R.utils_2.12.2         spatstat.explore_3.1-0
-  [4] reticulate_1.28        tidyselect_1.2.0       RSQLite_2.3.1         
-  [7] AnnotationDbi_1.60.2   htmlwidgets_1.6.2      grid_4.2.3            
- [10] Rtsne_0.16             munsell_0.5.0          codetools_0.2-19      
- [13] ica_1.0-3              future_1.32.0          miniUI_0.1.1.1        
- [16] withr_2.5.0            spatstat.random_3.1-4  colorspace_2.1-0      
- [19] progressr_0.13.0       filelock_1.0.2         Biobase_2.58.0        
- [22] knitr_1.42             rstudioapi_0.14        stats4_4.2.3          
- [25] ROCR_1.0-11            tensor_1.5             listenv_0.9.0         
- [28] labeling_0.4.2         GenomeInfoDbData_1.2.9 polyclip_1.10-4       
- [31] bit64_4.0.5            farver_2.1.1           rprojroot_2.0.3       
- [34] parallelly_1.35.0      vctrs_0.6.2            generics_0.1.3        
- [37] xfun_0.38              timechange_0.2.0       BiocFileCache_2.6.1   
- [40] R6_2.5.1               GenomeInfoDb_1.34.9    ggbeeswarm_0.7.1      
- [43] graphlayouts_0.8.4     rex_1.2.1              bitops_1.0-7          
- [46] spatstat.utils_3.0-2   cachem_1.0.7           promises_1.2.0.1      
- [49] scales_1.2.1           beeswarm_0.4.0         gtable_0.3.3          
- [52] globals_0.16.2         processx_3.8.1         goftest_1.2-3         
- [55] tidygraph_1.2.3        rlang_1.1.0            cyclocomp_1.1.0       
- [58] GlobalOptions_0.1.2    splines_4.2.3          lazyeval_0.2.2        
- [61] checkmate_2.1.0        spatstat.geom_3.1-0    yaml_2.3.7            
- [64] reshape2_1.4.4         abind_1.4-5            backports_1.4.1       
- [67] httpuv_1.6.9           tools_4.2.3            ellipsis_0.3.2        
- [70] RColorBrewer_1.1-3     BiocGenerics_0.44.0    ggridges_0.5.4        
- [73] plyr_1.8.8             progress_1.2.2         zlibbioc_1.44.0       
- [76] RCurl_1.98-1.12        ps_1.7.5               prettyunits_1.1.1     
- [79] deldir_1.0-6           pbapply_1.7-0          viridis_0.6.2         
- [82] cowplot_1.1.1          S4Vectors_0.36.2       zoo_1.8-12            
- [85] ggrepel_0.9.3          cluster_2.1.4          magrittr_2.0.3        
- [88] data.table_1.14.8      scattermore_0.8        circlize_0.4.15       
- [91] lmtest_0.9-40          RANN_2.6.1             R.cache_0.16.0        
- [94] fitdistrplus_1.1-8     matrixStats_0.63.0     hms_1.1.3             
- [97] patchwork_1.1.2        mime_0.12              evaluate_0.20         
-[100] xtable_1.8-4           XML_3.99-0.14          IRanges_2.32.0        
-[103] gridExtra_2.3          shape_1.4.6            compiler_4.2.3        
-[106] KernSmooth_2.23-20     crayon_1.5.2           R.oo_1.25.0           
-[109] htmltools_0.5.5        later_1.3.0            tzdb_0.3.0            
-[112] ggprism_1.0.4          DBI_1.1.3              tweenr_2.0.2          
-[115] dbplyr_2.3.2           rappdirs_0.3.3         MASS_7.3-58.3         
-[118] Matrix_1.5-4           cli_3.6.1              R.methodsS3_1.8.2     
-[121] parallel_4.2.3         igraph_1.4.2           pkgconfig_2.0.3       
-[124] sp_1.6-0               plotly_4.10.1          spatstat.sparse_3.0-1 
-[127] xml2_1.3.3             paletteer_1.5.0        vipor_0.4.5           
-[130] XVector_0.38.0         snakecase_0.11.0       callr_3.7.3           
-[133] digest_0.6.31          sctransform_0.3.5.9002 RcppAnnoy_0.0.20      
-[136] janitor_2.2.0          spatstat.data_3.0-1    Biostrings_2.66.0     
-[139] rmarkdown_2.21         leiden_0.4.3           uwot_0.1.14           
-[142] curl_5.0.0             shiny_1.7.4            lifecycle_1.0.3       
-[145] nlme_3.1-162           jsonlite_1.8.4         limma_3.54.2          
-[148] desc_1.4.2             viridisLite_0.4.1      fansi_1.0.4           
-[151] pillar_1.9.0           lattice_0.21-8         ggrastr_1.0.1         
-[154] KEGGREST_1.38.0        fastmap_1.1.1          httr_1.4.5            
-[157] survival_3.5-5         remotes_2.4.2          glue_1.6.2            
-[160] png_0.1-8              bit_4.0.5              ggforce_0.4.1         
-[163] stringi_1.7.12         rematch2_2.1.2         blob_1.2.4            
-[166] memoise_2.0.1          irlba_2.3.5.1          future.apply_1.10.0
+  [1] rappdirs_0.3.3              ggprism_1.0.4              
+  [3] scattermore_0.8             R.methodsS3_1.8.2          
+  [5] bit64_4.0.5                 knitr_1.42                 
+  [7] irlba_2.3.5.1               DelayedArray_0.24.0        
+  [9] R.utils_2.12.2              data.table_1.14.8          
+ [11] KEGGREST_1.38.0             RCurl_1.98-1.12            
+ [13] generics_0.1.3              BiocGenerics_0.44.0        
+ [15] callr_3.7.3                 cowplot_1.1.1              
+ [17] RSQLite_2.3.1               RANN_2.6.1                 
+ [19] future_1.32.0               bit_4.0.5                  
+ [21] tzdb_0.3.0                  spatstat.data_3.0-1        
+ [23] xml2_1.3.3                  httpuv_1.6.9               
+ [25] SummarizedExperiment_1.28.0 viridis_0.6.2              
+ [27] xfun_0.38                   hms_1.1.3                  
+ [29] evaluate_0.20               promises_1.2.0.1           
+ [31] fansi_1.0.4                 progress_1.2.2             
+ [33] dbplyr_2.3.2                igraph_1.4.2               
+ [35] DBI_1.1.3                   htmlwidgets_1.6.2          
+ [37] spatstat.geom_3.1-0         stats4_4.2.3               
+ [39] paletteer_1.5.0             ellipsis_0.3.2             
+ [41] deldir_1.0-6                sparseMatrixStats_1.10.0   
+ [43] MatrixGenerics_1.10.0       vctrs_0.6.2                
+ [45] SingleCellExperiment_1.20.1 Biobase_2.58.0             
+ [47] remotes_2.4.2               ROCR_1.0-11                
+ [49] abind_1.4-5                 cachem_1.0.7               
+ [51] withr_2.5.0                 ggforce_0.4.1              
+ [53] progressr_0.13.0            sctransform_0.4.1          
+ [55] prettyunits_1.1.1           goftest_1.2-3              
+ [57] cluster_2.1.4               cyclocomp_1.1.0            
+ [59] lazyeval_0.2.2              crayon_1.5.2               
+ [61] spatstat.explore_3.1-0      labeling_0.4.2             
+ [63] edgeR_3.40.2                pkgconfig_2.0.3            
+ [65] tweenr_2.0.2                GenomeInfoDb_1.34.9        
+ [67] nlme_3.1-162                vipor_0.4.5                
+ [69] rlang_1.1.0                 globals_0.16.2             
+ [71] lifecycle_1.0.3             miniUI_0.1.1.1             
+ [73] filelock_1.0.2              BiocFileCache_2.6.1        
+ [75] rex_1.2.1                   ggrastr_1.0.1              
+ [77] rprojroot_2.0.3             polyclip_1.10-4            
+ [79] matrixStats_0.63.0          lmtest_0.9-40              
+ [81] Matrix_1.5-4                Rhdf5lib_1.20.0            
+ [83] zoo_1.8-12                  beeswarm_0.4.0             
+ [85] ggridges_0.5.4              GlobalOptions_0.1.2        
+ [87] processx_3.8.1              png_0.1-8                  
+ [89] viridisLite_0.4.1           bitops_1.0-7               
+ [91] R.oo_1.25.0                 KernSmooth_2.23-20         
+ [93] rhdf5filters_1.10.1         Biostrings_2.66.0          
+ [95] blob_1.2.4                  DelayedMatrixStats_1.20.0  
+ [97] shape_1.4.6                 parallelly_1.35.0          
+ [99] spatstat.random_3.1-4       R.cache_0.16.0             
+[101] S4Vectors_0.36.2            beachmat_2.14.2            
+[103] scales_1.2.1                memoise_2.0.1              
+[105] magrittr_2.0.3              plyr_1.8.8                 
+[107] ica_1.0-3                   zlibbioc_1.44.0            
+[109] compiler_4.2.3              dqrng_0.3.0                
+[111] RColorBrewer_1.1-3          fitdistrplus_1.1-8         
+[113] snakecase_0.11.0            cli_3.6.1                  
+[115] XVector_0.38.0              listenv_0.9.0              
+[117] patchwork_1.1.2             pbapply_1.7-0              
+[119] ps_1.7.5                    MASS_7.3-58.3              
+[121] tidyselect_1.2.0            stringi_1.7.12             
+[123] yaml_2.3.7                  locfit_1.5-9.7             
+[125] ggrepel_0.9.3               grid_4.2.3                 
+[127] tools_4.2.3                 timechange_0.2.0           
+[129] future.apply_1.10.0         parallel_4.2.3             
+[131] circlize_0.4.15             rstudioapi_0.14            
+[133] janitor_2.2.0               gridExtra_2.3              
+[135] farver_2.1.1                Rtsne_0.16                 
+[137] DropletUtils_1.18.1         digest_0.6.31              
+[139] shiny_1.7.4                 GenomicRanges_1.50.2       
+[141] scuttle_1.8.4               later_1.3.0                
+[143] RcppAnnoy_0.0.20            httr_1.4.5                 
+[145] AnnotationDbi_1.60.2        colorspace_2.1-0           
+[147] XML_3.99-0.14               tensor_1.5                 
+[149] reticulate_1.28             IRanges_2.32.0             
+[151] splines_4.2.3               uwot_0.1.14                
+[153] rematch2_2.1.2              spatstat.utils_3.0-2       
+[155] graphlayouts_0.8.4          sp_1.6-0                   
+[157] plotly_4.10.1               xtable_1.8-4               
+[159] jsonlite_1.8.4              tidygraph_1.2.3            
+[161] R6_2.5.1                    pillar_1.9.0               
+[163] htmltools_0.5.5             mime_0.12                  
+[165] glue_1.6.2                  fastmap_1.1.1              
+[167] BiocParallel_1.32.6         codetools_0.2-19           
+[169] utf8_1.2.3                  lattice_0.21-8             
+[171] spatstat.sparse_3.0-1       curl_5.0.0                 
+[173] ggbeeswarm_0.7.1            leiden_0.4.3               
+[175] survival_3.5-5              limma_3.54.2               
+[177] rmarkdown_2.21              desc_1.4.2                 
+[179] munsell_0.5.0               rhdf5_2.42.1               
+[181] GenomeInfoDbData_1.2.9      HDF5Array_1.26.0           
+[183] reshape2_1.4.4              gtable_0.3.3
 
 # Time tracking
 ```{r}
