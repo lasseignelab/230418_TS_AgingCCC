@@ -1,6 +1,51 @@
 ### Functions for CCC in 3xTgAD project 
 # Tabea M. Soelter 
 
+## remove_ambientRNA
+# A function which removes ambient RNA from h5 files outputted from Cell Ranger for single cell data.
+remove_ambientRNA <- function(inputs, outputs, plots) {
+  print("Making list of objects")
+  counts_list <- list.dirs(inputs, 
+                           full.names = TRUE, 
+                           recursive = FALSE)
+  pdf(paste0(plots, "rho_density_plots.pdf"))
+  for (i in counts_list) {
+    set.seed(42)
+    # load in cell ranger h5 outputs
+    print("Loading cell ranger h5 objects")
+    filt_matrix <- Read10X_h5(paste0(i, "/filtered_feature_bc_matrix.h5"))
+    raw_matrix <- Read10X_h5(paste0(i, "/raw_feature_bc_matrix.h5"))
+    # create seurat object
+    print("Making seurat object")
+    object <- CreateSeuratObject(counts = filt_matrix)
+    # make soup channel object
+    print("Making soup channel object")
+    sco <- SoupChannel(raw_matrix, filt_matrix)
+    # get cluster info
+    print("Get cluster info")
+    object <- SCTransform(object, verbose = FALSE)
+    object <- RunPCA(object, approx = FALSE, verbose = FALSE)
+    object <- RunUMAP(object, dims = 1:30, verbose = FALSE)
+    object <- FindNeighbors(object, dims = 1:30, verbose = FALSE)
+    object <- FindClusters(object, verbose = FALSE)
+    # ading metadata to soup channel object
+    meta <- object@meta.data
+    umap <- object@reductions$umap@cell.embeddings
+    sco <- setClusters(sco, setNames(meta$seurat_clusters, rownames(meta)))
+    sco <- setDR(sco, umap)
+    # Analyzing the soup
+    print("Profiling the soup")
+    sco <- autoEstCont(sco)
+    # Create integer matrix
+    adjusted_matrix <- adjustCounts(sco, roundToInt = TRUE)
+    # save
+    print("Saving filtered objects")
+    sample_name <- basename(i)
+    DropletUtils::write10xCounts(paste0(outputs, sample_name), adjusted_matrix) 
+  }
+  dev.off()
+}
+
 ## make_seurat_object
 # A function which takes a path to sample folders with the three CellRanger output files and creates a merged seurat object
 make_seurat_object <- function(path){
@@ -22,7 +67,7 @@ make_seurat_object <- function(path){
         seurat_object$timepoint <- "12m"
       }
     } else {
-      seurat_object$orig.ident <- "CTRL"
+      seurat_object$orig.ident <- "WT"
       if (str_sub(sample_name, - 4, - 3) == "6m") {
         seurat_object$timepoint <- "6m"
       } else {
@@ -57,35 +102,35 @@ make_seurat_object <- function(path){
                             y = diseased_12m,
                             add.cell.id = c("6m", "12m"))
   
-  print("Making 6m control Seurat Object")
-  CTRL_list <- object_list[grepl("6m_WT", names(object_list))]
-  for (i in names(CTRL_list)) {
+  print("Making 6m wildtype Seurat Object")
+  WT_list <- object_list[grepl("6m_WT", names(object_list))]
+  for (i in names(WT_list)) {
     sample_name <- basename(i)
     sample_name <- gsub("[[:punct:]]", "", sample_name)
-    CTRL_list[[i]] <- RenameCells(CTRL_list[[i]],
+    WT_list[[i]] <- RenameCells(WT_list[[i]],
                                   add.cell.id = sample_name)
   }
-  control_6m <- Merge_Seurat_List(CTRL_list)
+  wildtype_6m <- Merge_Seurat_List(WT_list)
   
-  print("Making 12m control Seurat Object")
-  CTRL_list <- object_list[grepl("12m_WT", names(object_list))]
-  for (i in names(CTRL_list)) {
+  print("Making 12m wildtype Seurat Object")
+  WT_list <- object_list[grepl("12m_WT", names(object_list))]
+  for (i in names(WT_list)) {
     sample_name <- basename(i)
     sample_name <- gsub("[[:punct:]]", "", sample_name)
-    CTRL_list[[i]] <- RenameCells(CTRL_list[[i]],
+    WT_list[[i]] <- RenameCells(WT_list[[i]],
                                   add.cell.id = sample_name)
   }
-  control_12m <- Merge_Seurat_List(CTRL_list)
+  wildtype_12m <- Merge_Seurat_List(WT_list)
   
-  print("Merging 6m and 12m control objects")
-  merged_seurat_CTRL <- merge(x = control_6m,
-                            y = control_12m,
+  print("Merging 6m and 12m wildtype objects")
+  merged_seurat_WT <- merge(x = wildtype_6m,
+                            y = wildtype_12m,
                             add.cell.id = c("6m", "12m"))
   
   print("Making merged Seurat Object")
-  merged_seurat <- merge(x = merged_seurat_CTRL,
+  merged_seurat <- merge(x = merged_seurat_WT,
                          y = merged_seurat_AD,
-                         add.cell.id = c("CTRL", "AD"))
+                         add.cell.id = c("WT", "AD"))
   return(merged_seurat)
 }
 
@@ -104,10 +149,19 @@ calculate_qc <- function(seurat_object){
 format_metadata <- function(seurat_object){
   metadata <- seurat_object@meta.data
   metadata$cells <- rownames(metadata)
-  # Create sample column -----
+  # Create sample columns -----
   metadata$sample <- NA
-  metadata$sample[which(str_detect(metadata$cells, "^CTRL_"))] <- "ctrl"
-  metadata$sample[which(str_detect(metadata$cells, "^AD_"))] <- "AD"
+  metadata$sample <- ifelse(
+    str_sub(merged_seurat@assays[["RNA"]]@data@Dimnames[[2]], 4, 5) == "6m",
+    str_sub(merged_seurat@assays[["RNA"]]@data@Dimnames[[2]], 7, 9),
+    str_sub(merged_seurat@assays[["RNA"]]@data@Dimnames[[2]], 8, 10)
+  )
+  
+  metadata$orig_sample_id <- ifelse(
+    str_sub(merged_seurat@assays[["RNA"]]@data@Dimnames[[2]], 4, 5) == "6m",
+    str_sub(merged_seurat@assays[["RNA"]]@data@Dimnames[[2]], 7, 13),
+    str_sub(merged_seurat@assays[["RNA"]]@data@Dimnames[[2]], 8, 15)
+  )
   # Rename columns -----
   metadata <- metadata %>% dplyr::rename(seq_folder = orig.ident,
                                          nUMI = nCount_RNA,
@@ -118,9 +172,9 @@ format_metadata <- function(seurat_object){
 ## plot_qc
 # A function which takes seurat metadata and plots quality control metrics for filtering purposes
 plot_qc <- function(metadata) {
-  # Visualize the number of cell counts per sample
+  # Visualize the number of cell counts per condition
   number_of_cells <- metadata %>% 
-    ggplot(aes(x = sample, fill = sample)) + 
+    ggplot(aes(x = seq_folder, fill = seq_folder)) + 
     geom_bar() +
     theme_classic() +
     theme(axis.text.x = element_text(angle = 45, vjust = 1, hjust=1)) +
@@ -128,7 +182,7 @@ plot_qc <- function(metadata) {
     ggtitle("NCells") 
   # Visualize the number UMIs/transcripts per cell
   number_of_umis <- metadata %>% 
-    ggplot(aes(color = sample, x = nUMI, fill = sample)) + 
+    ggplot(aes(color = seq_folder, x = nUMI, fill = seq_folder)) + 
     geom_density(alpha = 0.2) + 
     scale_x_log10() + 
     theme_classic() +
@@ -136,20 +190,20 @@ plot_qc <- function(metadata) {
     geom_vline(xintercept = 500)
   # Visualize the distribution of genes detected per cell
   dist_genes_per_cell <- metadata %>% 
-    ggplot(aes(color = sample, x = nGene, fill = sample)) + 
+    ggplot(aes(color = seq_folder, x = nGene, fill = seq_folder)) + 
     geom_density(alpha = 0.2) + 
     theme_classic() +
     scale_x_log10() + 
     geom_vline(xintercept = 300)
   # Visualize the overall complexity of the gene expression by visualizing the genes detected per UMI (novelty score)
   novelty_score <- metadata %>%
-    ggplot(aes(x = log10GenesPerUMI, color = sample, fill = sample)) +
+    ggplot(aes(x = log10GenesPerUMI, color = seq_folder, fill = seq_folder)) +
     geom_density(alpha = 0.2) +
     theme_classic() +
     geom_vline(xintercept = 0.8)
   # Visualize the distribution of mitochondrial gene expression detected per cell
   dist_mito_gex <- metadata %>% 
-    ggplot(aes(color = sample, x = mitoRatio, fill = sample)) + 
+    ggplot(aes(color = seq_folder, x = mitoRatio, fill = seq_folder)) + 
     geom_density(alpha = 0.2) + 
     scale_x_log10() + 
     theme_classic() +
@@ -165,7 +219,7 @@ plot_qc <- function(metadata) {
     theme_classic() +
     geom_vline(xintercept = 500) +
     geom_hline(yintercept = 250) +
-    facet_wrap(~sample)
+    facet_wrap(~seq_folder)
   # Plot QC metrics
   plot(number_of_cells) 
   plot(number_of_umis)
