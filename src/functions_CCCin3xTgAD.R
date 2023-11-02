@@ -334,3 +334,25 @@ find_markers <- function(object, resolution, identities, value){
   }
   return(top_markers)
 }
+
+## make_sce
+# A function which requires a Seurat object in order to create single cell experiment object. It also appends the necessary metadata for pseudo-bulking by cell type and sample.
+make_sce <- function(object) {
+  # raw data
+  counts <- object@assays$RNA@counts
+  # metadata
+  metadata <- object@meta.data
+  # add sample_id column as class 'factor'
+  metadata$sample_id <- metadata$sample %>% as.factor()
+  # add condition information
+  metadata$group_id <- metadata$orig.ident
+  metadata$group_id <- relevel(metadata$group_id, "WT")
+  # add cell type information
+  metadata$cluster_id <- factor(object@active.ident)
+  # make sce object
+  sce <- SingleCellExperiment(assays = list(counts = counts), colData = metadata)
+  
+  return(sce)
+}
+
+
