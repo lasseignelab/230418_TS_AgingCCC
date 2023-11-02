@@ -378,6 +378,38 @@ pseudobulk <- function(sce) {
   return(counts_ls)
 }
 
+## cts_metadata
+# A wrapper function to create cell-type-specific metadata for the previously pseudo-bulked count data. This code was adapted from the HBC pseudobulk tutorials.
+cts_metadata <- function(sce, counts_list) {
+  metadata <- colData(sce) %>% 
+    as.data.frame() %>% 
+    dplyr::select(group_id, sample_id)
+  metadata <- metadata[!duplicated(metadata), ]
+  rownames(metadata) <- metadata$sample_id
+  t <- table(colData(sce)$sample_id,
+             colData(sce)$cluster_id)
+  
+  metadata_ls <- list()
+  
+  for (i in 1:length(counts_list)) {
+    df <- data.frame(cluster_sample_id = colnames(counts_list[[i]]))
+    df$cluster_id <- tstrsplit(df$cluster_sample_id, "_")[[1]]
+    df$sample_id  <- tstrsplit(df$cluster_sample_id, "_")[[2]]
+    idx <- which(colnames(t) == unique(df$cluster_id))
+    cell_counts <- t[, idx]
+    cell_counts <- cell_counts[cell_counts > 0]
+    sample_order <- match(df$sample_id, names(cell_counts))
+    cell_counts <- cell_counts[sample_order]
+    df$cell_count <- cell_counts
+    df <- plyr::join(df, metadata, 
+                     by = intersect(names(df), names(metadata)))
+    rownames(df) <- df$cluster_sample_id
+    metadata_ls[[i]] <- df
+    names(metadata_ls)[i] <- unique(df$cluster_id)
+  }
+  return(metadata_ls)
+}
+
 
 
 
