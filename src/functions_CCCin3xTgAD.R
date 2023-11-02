@@ -355,4 +355,31 @@ make_sce <- function(object) {
   return(sce)
 }
 
+## pseudobulk
+# A wrapper function which generates pseudo-bulked data from single cell experiment objects by cell type. The code was adapted form the HBC pseudobulk tutorial.
+pseudobulk <- function(sce) {
+  # prepare for pseudo-bulking
+  cluster_names <- levels(colData(sce)$cluster_id)
+  print(paste0(length(cluster_names), " cell types"))
+  sample_names <- levels(colData(sce)$sample_id)
+  print(paste0(length(sample_names), " samples"))
+  groups <- colData(sce)[, c("cluster_id", "sample_id")]
+  aggr_counts <- aggregate.Matrix(t(counts(sce)), 
+                                  groupings = groups, fun = "sum")
+  aggr_counts <- t(aggr_counts)
+  # Loop over cell types and extract counts (pseudo-bulk)
+  counts_ls <- list()
+  for (i in 1:length(cluster_names)) {
+    column_idx <- which(tstrsplit(colnames(aggr_counts), "_")[[1]] == cluster_names[i])
+    counts_ls[[i]] <- aggr_counts[, column_idx]
+    names(counts_ls)[i] <- cluster_names[i]
+  }
+  
+  return(counts_ls)
+}
+
+
+
+
+
 
