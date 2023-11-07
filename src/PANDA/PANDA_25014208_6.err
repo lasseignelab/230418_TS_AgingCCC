@@ -1,0 +1,105 @@
+Loading required package: igraph
+
+Attaching package: 'igraph'
+
+The following objects are masked from 'package:stats':
+
+    decompose, spectrum
+
+The following object is masked from 'package:base':
+
+    union
+
+Loading required package: reticulate
+Loading required package: pandaR
+Loading required package: Biobase
+Loading required package: BiocGenerics
+
+Attaching package: 'BiocGenerics'
+
+The following objects are masked from 'package:igraph':
+
+    normalize, path, union
+
+The following objects are masked from 'package:stats':
+
+    IQR, mad, sd, var, xtabs
+
+The following objects are masked from 'package:base':
+
+    Filter, Find, Map, Position, Reduce, anyDuplicated, aperm, append,
+    as.data.frame, basename, cbind, colnames, dirname, do.call,
+    duplicated, eval, evalq, get, grep, grepl, intersect, is.unsorted,
+    lapply, mapply, match, mget, order, paste, pmax, pmax.int, pmin,
+    pmin.int, rank, rbind, rownames, sapply, setdiff, sort, table,
+    tapply, union, unique, unsplit, which.max, which.min
+
+Welcome to Bioconductor
+
+    Vignettes contain introductory material; view with
+    'browseVignettes()'. To cite Bioconductor, see
+    'citation("Biobase")', and for packages 'citation("pkgname")'.
+
+Loading required package: yarn
+Setting options('download.file.method.GEOquery'='auto')
+Setting options('GEOquery.inmemory.gpl'=FALSE)
+Loading required package: matrixcalc
+
+Attaching package: 'matrixcalc'
+
+The following object is masked from 'package:igraph':
+
+    %s%
+
+
+
+Iteration0: hamming distance =3.47036
+Iteration1: hamming distance =0.8313
+Iteration2: hamming distance =0.65426
+Iteration3: hamming distance =0.58464
+Iteration4: hamming distance =0.53501
+Iteration5: hamming distance =0.48963
+Iteration6: hamming distance =0.44503
+Iteration7: hamming distance =0.40091
+Iteration8: hamming distance =0.35791
+Iteration9: hamming distance =0.31681
+Iteration10: hamming distance =0.27826
+Iteration11: hamming distance =0.2427
+Iteration12: hamming distance =0.21037
+Iteration13: hamming distance =0.18134
+Iteration14: hamming distance =0.15556
+Iteration15: hamming distance =0.13286
+Iteration16: hamming distance =0.11304
+Iteration17: hamming distance =0.09584
+Iteration18: hamming distance =0.081
+Iteration19: hamming distance =0.06827
+Iteration20: hamming distance =0.0574
+Iteration21: hamming distance =0.04814
+Iteration22: hamming distance =0.0403
+Iteration23: hamming distance =0.03367
+Iteration24: hamming distance =0.02808
+Iteration25: hamming distance =0.02338
+Iteration26: hamming distance =0.01944
+Iteration27: hamming distance =0.01614
+Iteration28: hamming distance =0.01339
+Iteration29: hamming distance =0.01109
+Iteration30: hamming distance =0.00918
+Iteration31: hamming distance =0.00759
+Iteration32: hamming distance =0.00627
+Iteration33: hamming distance =0.00518
+Iteration34: hamming distance =0.00427
+Iteration35: hamming distance =0.00352
+Iteration36: hamming distance =0.0029
+Iteration37: hamming distance =0.00239
+Iteration38: hamming distance =0.00196
+Iteration39: hamming distance =0.00162
+Iteration40: hamming distance =0.00133
+Iteration41: hamming distance =0.00109
+Iteration42: hamming distance =9e-04
+Successfully ran PANDA on 19750 Genes and 695 TFs.
+Time elapsed:2606.08seconds.
+Warning messages:
+1: In cor(t(expr), method = cor.method, use = "pairwise.complete.obs") :
+  the standard deviation is zero
+2: In panda(expr = expression, ppi = ppi, motif = motif, progress = TRUE,  :
+  Duplicate edges have been found in the motif data. Weights will be summed.
