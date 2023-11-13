@@ -374,7 +374,6 @@ pseudobulk <- function(sce) {
     counts_ls[[i]] <- aggr_counts[, column_idx]
     names(counts_ls)[i] <- cluster_names[i]
   }
-  
   return(counts_ls)
 }
 
@@ -383,7 +382,7 @@ pseudobulk <- function(sce) {
 cts_metadata <- function(sce, counts_list) {
   metadata <- colData(sce) %>% 
     as.data.frame() %>% 
-    dplyr::select(group_id, sample_id)
+    dplyr::select(group_id, sample_id, timepoint)
   metadata <- metadata[!duplicated(metadata), ]
   rownames(metadata) <- metadata$sample_id
   t <- table(colData(sce)$sample_id,
@@ -410,7 +409,48 @@ cts_metadata <- function(sce, counts_list) {
   return(metadata_ls)
 }
 
-
+## deseq2_dea
+# A wrapper function which does DEA using DESeq2 for pseudo-bulked single cell data. It automatically saves both significant and all DEGs in a 'pseudobulk' directory at the specified path. This code is originally form the HBC training guide, but was heavily adapted.
+deseq2_dea <- function(cell_types, counts_ls, metadata_ls, group_oi, B, padj_cutoff = 0.05, path, shrinkage) {
+  cell_type <- cell_types[1]
+  print(cell_type)
+  ifelse(!dir.exists(here(paste0(path, "03_dea/"))),
+         dir.create(here(paste0(path, "03_dea/"))),
+         print("Info: 03_dea directory already exists"))
+  idx <- which(names(counts_ls) == cell_type)
+  cluster_counts <- counts_ls[[idx]]
+  cluster_metadata <- metadata_ls[[idx]]
+  dds <- DESeqDataSetFromMatrix(cluster_counts, 
+                                colData = cluster_metadata, 
+                                design = ~ timepoint + group_id + timepoint:group_id)
+  dds$group <- factor(paste0(dds$timepoint, dds$group_id))
+  dds$group <- relevel(dds$group, ref = B)
+  design(dds) <- ~ group
+  dds <- DESeq(dds, quiet = TRUE)
+  print(resultsNames(dds))
+  name <- paste(c("group", group_oi, "vs", B), collapse = "_")
+  print(name)
+  res <- results(dds, name = name, alpha = 0.05)
+  res <- lfcShrink(dds, coef = name, res = res, type = shrinkage, quiet = TRUE)
+  res_tbl <- res %>%
+    data.frame() %>%
+    rownames_to_column(var = "gene") %>%
+    as_tibble()
+  # save all results
+  write.csv(res_tbl,
+            here(paste0(path, "03_dea/", cell_type, "_", name, "_all_genes.csv")),
+            quote = FALSE, 
+            row.names = FALSE)
+  
+  # save sig results
+  sig_res <- dplyr::filter(res_tbl, padj < padj_cutoff) %>%
+    dplyr::arrange(padj)
+  
+  write.csv(sig_res,
+            here(paste0(path, "03_dea/", cell_type, "_", name, "_sig_genes.csv")),
+            quote = FALSE, 
+            row.names = FALSE)
+}
 
 
 
