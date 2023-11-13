@@ -20,16 +20,17 @@ __Data__:
 * Name: processed_seurat.rds
 * Location: data/seurat/
  
-#__Analysis Plan__: EDIT THIS
+__Analysis Plan__:
 * Load necessary packages 
 * Load data
-  * Seurat objects
-* Create Single Cell Experiment objects
+  * Seurat object
+* Create Single Cell Experiment object
 * Prepare for DGE Analysis
   * Pseudo-bulk data by cell type across samples
-* DGE Analysis using DESeq2 between AD (group of interest) and CTRL
+* DGE Analysis using DESeq2 between AD (group of interest) and WT
   * Wrapper function
   * Saves outputs
+  * Make comparison between AD and WT for each of the 2 time points
   
 # Load packages
 ```{r}
