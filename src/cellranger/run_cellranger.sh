@@ -25,7 +25,7 @@ SAMPLE_INPUT=`echo ${SAMPLE_LIST[$SLURM_ARRAY_TASK_ID]}`
 echo $ID_INPUT
 echo $SAMPLE_INPUT
 
-mkdir ${WD}/data/CellRangerCounts/pre_soupX/
+mkdir -p ${WD}/data/CellRangerCounts/pre_soupX/
 
 cd ${WD}/data/CellRangerCounts/pre_soupX/
 
@@ -34,4 +34,3 @@ cellranger count --id=${ID_INPUT} \
                  --include-introns \
                  --fastqs=/data/project/lasseigne_lab/TabeaSoelter/3xTg_snRNAseq/rawData/ \
                  --sample=${SAMPLE_INPUT}
-
