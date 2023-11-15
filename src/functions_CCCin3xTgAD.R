@@ -334,3 +334,124 @@ find_markers <- function(object, resolution, identities, value){
   }
   return(top_markers)
 }
+
+## make_sce
+# A function which requires a Seurat object in order to create single cell experiment object. It also appends the necessary metadata for pseudo-bulking by cell type and sample.
+make_sce <- function(object) {
+  # raw data
+  counts <- object@assays$RNA@counts
+  # metadata
+  metadata <- object@meta.data
+  # add sample_id column as class 'factor'
+  metadata$sample_id <- metadata$sample %>% as.factor()
+  # add condition information
+  metadata$group_id <- metadata$orig.ident
+  metadata$group_id <- relevel(metadata$group_id, "WT")
+  # add cell type information
+  metadata$cluster_id <- factor(object@active.ident)
+  # make sce object
+  sce <- SingleCellExperiment(assays = list(counts = counts), colData = metadata)
+  
+  return(sce)
+}
+
+## pseudobulk
+# A wrapper function which generates pseudo-bulked data from single cell experiment objects by cell type. The code was adapted form the HBC pseudobulk tutorial.
+pseudobulk <- function(sce) {
+  # prepare for pseudo-bulking
+  cluster_names <- levels(colData(sce)$cluster_id)
+  print(paste0(length(cluster_names), " cell types"))
+  sample_names <- levels(colData(sce)$sample_id)
+  print(paste0(length(sample_names), " samples"))
+  groups <- colData(sce)[, c("cluster_id", "sample_id")]
+  aggr_counts <- aggregate.Matrix(t(counts(sce)), 
+                                  groupings = groups, fun = "sum")
+  aggr_counts <- t(aggr_counts)
+  # Loop over cell types and extract counts (pseudo-bulk)
+  counts_ls <- list()
+  for (i in 1:length(cluster_names)) {
+    column_idx <- which(tstrsplit(colnames(aggr_counts), "_")[[1]] == cluster_names[i])
+    counts_ls[[i]] <- aggr_counts[, column_idx]
+    names(counts_ls)[i] <- cluster_names[i]
+  }
+  return(counts_ls)
+}
+
+## cts_metadata
+# A wrapper function to create cell-type-specific metadata for the previously pseudo-bulked count data. This code was adapted from the HBC pseudobulk tutorials.
+cts_metadata <- function(sce, counts_list) {
+  metadata <- colData(sce) %>% 
+    as.data.frame() %>% 
+    dplyr::select(group_id, sample_id, timepoint)
+  metadata <- metadata[!duplicated(metadata), ]
+  rownames(metadata) <- metadata$sample_id
+  t <- table(colData(sce)$sample_id,
+             colData(sce)$cluster_id)
+  
+  metadata_ls <- list()
+  
+  for (i in 1:length(counts_list)) {
+    df <- data.frame(cluster_sample_id = colnames(counts_list[[i]]))
+    df$cluster_id <- tstrsplit(df$cluster_sample_id, "_")[[1]]
+    df$sample_id  <- tstrsplit(df$cluster_sample_id, "_")[[2]]
+    idx <- which(colnames(t) == unique(df$cluster_id))
+    cell_counts <- t[, idx]
+    cell_counts <- cell_counts[cell_counts > 0]
+    sample_order <- match(df$sample_id, names(cell_counts))
+    cell_counts <- cell_counts[sample_order]
+    df$cell_count <- cell_counts
+    df <- plyr::join(df, metadata, 
+                     by = intersect(names(df), names(metadata)))
+    rownames(df) <- df$cluster_sample_id
+    metadata_ls[[i]] <- df
+    names(metadata_ls)[i] <- unique(df$cluster_id)
+  }
+  return(metadata_ls)
+}
+
+## deseq2_dea
+# A wrapper function which does DEA using DESeq2 for pseudo-bulked single cell data. It automatically saves both significant and all DEGs in a 'pseudobulk' directory at the specified path. This code is originally form the HBC training guide, but was heavily adapted.
+deseq2_dea <- function(cell_types, counts_ls, metadata_ls, group_oi, B, padj_cutoff = 0.05, path, shrinkage) {
+  cell_type <- cell_types[1]
+  print(cell_type)
+  ifelse(!dir.exists(here(paste0(path, "03_dea/"))),
+         dir.create(here(paste0(path, "03_dea/"))),
+         print("Info: 03_dea directory already exists"))
+  idx <- which(names(counts_ls) == cell_type)
+  cluster_counts <- counts_ls[[idx]]
+  cluster_metadata <- metadata_ls[[idx]]
+  dds <- DESeqDataSetFromMatrix(cluster_counts, 
+                                colData = cluster_metadata, 
+                                design = ~ timepoint + group_id + timepoint:group_id)
+  dds$group <- factor(paste0(dds$timepoint, dds$group_id))
+  dds$group <- relevel(dds$group, ref = B)
+  design(dds) <- ~ group
+  dds <- DESeq(dds, quiet = TRUE)
+  print(resultsNames(dds))
+  name <- paste(c("group", group_oi, "vs", B), collapse = "_")
+  print(name)
+  res <- results(dds, name = name, alpha = 0.05)
+  res <- lfcShrink(dds, coef = name, res = res, type = shrinkage, quiet = TRUE)
+  res_tbl <- res %>%
+    data.frame() %>%
+    rownames_to_column(var = "gene") %>%
+    as_tibble()
+  # save all results
+  write.csv(res_tbl,
+            here(paste0(path, "03_dea/", cell_type, "_", name, "_all_genes.csv")),
+            quote = FALSE, 
+            row.names = FALSE)
+  
+  # save sig results
+  sig_res <- dplyr::filter(res_tbl, padj < padj_cutoff) %>%
+    dplyr::arrange(padj)
+  
+  write.csv(sig_res,
+            here(paste0(path, "03_dea/", cell_type, "_", name, "_sig_genes.csv")),
+            quote = FALSE, 
+            row.names = FALSE)
+}
+
+
+
+

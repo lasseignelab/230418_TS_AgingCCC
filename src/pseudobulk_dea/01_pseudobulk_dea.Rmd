@@ -1,0 +1,263 @@
+---
+title: "01_pseudobulk_dea"
+author: "Tabea M. Soelter"
+date: "2023-10-30"
+output: html_document
+---
+**Pseudo-bulk differential gene expression analysis using DESeq2**
+
+__Goal__: I am pseudo-bulking counts by cell type in order to perform a differential gene expression analysis using DESeq2 between time points and accounting for condition (AD and WT)
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.0
+* HPC: Yes
+  * Resources: long partition (150hrs), 6 CPUs, 85GB per CPU
+
+__Data__:
+*Seurat objects*
+* Name: processed_seurat.rds
+* Location: data/seurat/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * Seurat object
+* Create Single Cell Experiment object
+* Prepare for DGE Analysis
+  * Pseudo-bulk data by cell type across samples
+* DGE Analysis using DESeq2 between AD (group of interest) and WT
+  * Wrapper function
+  * Saves outputs
+  * Make comparison between AD and WT for each of the 2 time points
+  
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(SingleCellExperiment)
+  library(DESeq2)
+  library(apeglm)
+  library(tidyverse)
+  library(Seurat)
+  library(Matrix.utils)
+  library(data.table)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+processed_seurat <- readRDS(here(
+  "data",
+  "seurat",
+  "processed_seurat.rds"
+))
+```
+
+# SCE objects creation
+* pulling counts and metadata from seurat object
+* create the following columns in metadata beforehand:
+  * sample_id (factorized sample column)
+  * group_id (condition information - re-leveled for WT)
+  * cluster_id (cell types)
+```{r}
+sce_object <- make_sce(processed_seurat)
+```
+
+# Pseudo-bulk
+* This is done for each cell type across samples and condition
+* We should expect to see 11 cell types and 12 samples 
+```{r}
+counts_ls <- pseudobulk(sce_object)
+
+# Make list names lower case and replace spaces
+names(counts_ls) <- gsub(" ", "_", tolower(names(counts_ls)))
+```
+
+# Save pseudo-bulked files
+```{r}
+# save pseudo-bulked counts list
+saveRDS(counts_ls, file = here("data", "pseudobulk", "all_counts_ls.rds"))
+
+# save lists by cell type
+for (element_name in names(counts_ls)) {
+  element_data <- counts_ls[[element_name]]
+  saveRDS(element_data,
+          here("data", "pseudobulk", paste0(element_name, ".rds")))
+}
+```
+
+# Get cell-type-specific metadata
+```{r}
+metadata_ls <- cts_metadata(
+  sce = sce_object,
+  counts_list = counts_ls
+)
+
+# Make list names lower case and replace spaces
+names(metadata_ls) <- gsub(" ", "_", tolower(names(metadata_ls)))
+```
+
+# DE Analysis
+* Determining DEGs for each cell type between conditions across time points
+  * Using DESeq2
+  * I created a "group" column which combines condition and time point information
+    * Groups: 6mAD, 6mWT, 12mAD, 12mWT
+    * This allows for comparisons between AD and WT at both time points
+    * This does **not** produce genes that change over time **due to** condition
+  * Our base level is the level specified with B
+* Statistics: Wald test
+* Wrapper will also save DEGs to specified directory
+```{r}
+# get cell types
+cluster_names <- levels(colData(sce_object)$cluster_id)
+cluster_names <- gsub(" ", "_", tolower(cluster_names))
+
+# DEA using DESeq2 for 6-month time point
+lapply(cluster_names,
+  deseq2_dea,
+  group_oi = "6mAD",
+  B = "6mWT",
+  path = "results/intermediate_outputs/",
+  metadata_ls = metadata_ls,
+  counts_ls = counts_ls,
+  shrinkage = "apeglm"
+)
+
+# DEA using DESeq2 for 12-month time point
+lapply(cluster_names,
+  deseq2_dea,
+  group_oi = "12mAD",
+  B = "12mWT",
+  path = "results/intermediate_outputs/",
+  metadata_ls = metadata_ls,
+  counts_ls = counts_ls,
+  shrinkage = "apeglm"
+)
+```
+
+# Session Info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2                 styler_1.9.1                here_1.0.1                 
+ [4] data.table_1.14.8           Matrix.utils_0.9.7          Matrix_1.5-4               
+ [7] SeuratObject_4.1.3          Seurat_4.3.0                lubridate_1.9.2            
+[10] forcats_1.0.0               stringr_1.5.0               dplyr_1.1.1                
+[13] purrr_1.0.1                 readr_2.1.4                 tidyr_1.3.0                
+[16] tibble_3.2.1                ggplot2_3.4.2               tidyverse_2.0.0            
+[19] apeglm_1.23.1               DESeq2_1.38.3               SingleCellExperiment_1.20.1
+[22] SummarizedExperiment_1.28.0 Biobase_2.58.0              GenomicRanges_1.50.2       
+[25] GenomeInfoDb_1.34.9         IRanges_2.32.0              S4Vectors_0.36.2           
+[28] BiocGenerics_0.44.0         MatrixGenerics_1.10.0       matrixStats_0.63.0         
+
+loaded via a namespace (and not attached):
+  [1] utf8_1.2.3                spatstat.explore_3.1-0    reticulate_1.28          
+  [4] R.utils_2.12.2            tidyselect_1.2.0          RSQLite_2.3.1            
+  [7] AnnotationDbi_1.60.2      htmlwidgets_1.6.2         grid_4.2.3               
+ [10] BiocParallel_1.32.6       Rtsne_0.16                DropletUtils_1.18.1      
+ [13] munsell_0.5.0             codetools_0.2-19          ica_1.0-3                
+ [16] future_1.32.0             miniUI_0.1.1.1            withr_2.5.0              
+ [19] spatstat.random_3.1-4     colorspace_2.1-0          progressr_0.13.0         
+ [22] knitr_1.42                rstudioapi_0.14           ROCR_1.0-11              
+ [25] tensor_1.5                listenv_0.9.0             bbmle_1.0.25             
+ [28] GenomeInfoDbData_1.2.9    polyclip_1.10-4           bit64_4.0.5              
+ [31] rhdf5_2.42.1              rprojroot_2.0.3           coda_0.19-4              
+ [34] parallelly_1.35.0         vctrs_0.6.2               generics_0.1.3           
+ [37] xfun_0.38                 timechange_0.2.0          R6_2.5.1                 
+ [40] locfit_1.5-9.7            rex_1.2.1                 rhdf5filters_1.10.1      
+ [43] bitops_1.0-7              spatstat.utils_3.0-2      cachem_1.0.7             
+ [46] DelayedArray_0.24.0       promises_1.2.0.1          scales_1.2.1             
+ [49] gtable_0.3.3              beachmat_2.14.2           globals_0.16.2           
+ [52] processx_3.8.1            goftest_1.2-3             rlang_1.1.0              
+ [55] cyclocomp_1.1.0           splines_4.2.3             lazyeval_0.2.2           
+ [58] spatstat.geom_3.1-0       yaml_2.3.7                reshape2_1.4.4           
+ [61] abind_1.4-5               httpuv_1.6.9              tools_4.2.3              
+ [64] ellipsis_0.3.2            RColorBrewer_1.1-3        ggridges_0.5.4           
+ [67] Rcpp_1.0.10               plyr_1.8.8                sparseMatrixStats_1.10.0 
+ [70] zlibbioc_1.44.0           RCurl_1.98-1.12           ps_1.7.5                 
+ [73] deldir_1.0-6              pbapply_1.7-0             cowplot_1.1.1            
+ [76] zoo_1.8-12                grr_0.9.5                 ggrepel_0.9.3            
+ [79] cluster_2.1.4             magrittr_2.0.3            scattermore_0.8          
+ [82] lmtest_0.9-40             RANN_2.6.1                mvtnorm_1.1-3            
+ [85] fitdistrplus_1.1-8        R.cache_0.16.0            hms_1.1.3                
+ [88] patchwork_1.1.2           mime_0.12                 evaluate_0.20            
+ [91] xtable_1.8-4              XML_3.99-0.14             emdbook_1.3.12           
+ [94] gridExtra_2.3             compiler_4.2.3            bdsmatrix_1.3-6          
+ [97] KernSmooth_2.23-20        crayon_1.5.2              R.oo_1.25.0              
+[100] htmltools_0.5.5           later_1.3.0               tzdb_0.3.0               
+[103] geneplotter_1.76.0        DBI_1.1.3                 MASS_7.3-58.3            
+[106] cli_3.6.1                 R.methodsS3_1.8.2         parallel_4.2.3           
+[109] igraph_1.4.2              pkgconfig_2.0.3           numDeriv_2016.8-1.1      
+[112] sp_1.6-0                  scuttle_1.8.4             plotly_4.10.1            
+[115] spatstat.sparse_3.0-1     xml2_1.3.3                annotate_1.76.0          
+[118] dqrng_0.3.0               XVector_0.38.0            callr_3.7.3              
+[121] digest_0.6.31             sctransform_0.4.1         RcppAnnoy_0.0.20         
+[124] spatstat.data_3.0-1       Biostrings_2.66.0         rmarkdown_2.21           
+[127] leiden_0.4.3              edgeR_3.40.2              uwot_0.1.14              
+[130] DelayedMatrixStats_1.20.0 shiny_1.7.4               lifecycle_1.0.3          
+[133] nlme_3.1-162              jsonlite_1.8.4            Rhdf5lib_1.20.0          
+[136] limma_3.54.2              desc_1.4.2                viridisLite_0.4.1        
+[139] fansi_1.0.4               pillar_1.9.0              lattice_0.21-8           
+[142] KEGGREST_1.38.0           fastmap_1.1.1             httr_1.4.5               
+[145] survival_3.5-5            glue_1.6.2                remotes_2.4.2            
+[148] png_0.1-8                 bit_4.0.5                 HDF5Array_1.26.0         
+[151] stringi_1.7.12            blob_1.2.4                memoise_2.0.1            
+[154] irlba_2.3.5.1             future.apply_1.10.0 
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 30 mins
+```
+
+# Reproducibility
+```{r eval=FALSE, include=FALSE}
+# styler
+style_file(here(
+  "src",
+  "pseudobulk_dea",
+  "01_pseudobulk_dea.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "pseudobulk_dea",
+  "01_pseudobulk_dea.Rmd"
+))
+```
