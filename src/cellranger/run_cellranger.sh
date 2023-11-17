@@ -6,7 +6,7 @@
 #SBATCH --cpus-per-task=4  ## the number of threads allocated to each task
 #SBATCH --mem-per-cpu=64G   # memory per CPU core
 #SBATCH --partition=medium  ## the partition to run in (short == 12h max run time)
-#SBATCH --array=0-10 #11 samples
+#SBATCH --array=0-11 #12 samples
 
 
 ## Load modules
