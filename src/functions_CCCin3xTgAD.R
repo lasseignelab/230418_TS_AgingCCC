@@ -2,7 +2,7 @@
 # Tabea M. Soelter 
 
 ## remove_ambientRNA
-# A function which removes ambient RNA from h5 files outputted from Cell Ranger for single cell data.
+# A function which removes ambient RNA from h5 files from Cell Ranger (inputs) and generates filtered barcodes, features, and matrix tsv files, which serve as input to generate Seurat objects during preprocessing. 
 remove_ambientRNA <- function(inputs, outputs, plots) {
   print("Making list of objects")
   counts_list <- list.dirs(inputs, 
@@ -18,29 +18,30 @@ remove_ambientRNA <- function(inputs, outputs, plots) {
     # create seurat object
     print("Making seurat object")
     object <- CreateSeuratObject(counts = filt_matrix)
-    # make soup channel object
+    # make soup channel object required for soupX
     print("Making soup channel object")
     sco <- SoupChannel(raw_matrix, filt_matrix)
-    # get cluster info
+    # get cluster info (soupX requires very basic level clustering info)
     print("Get cluster info")
     object <- SCTransform(object, verbose = FALSE)
     object <- RunPCA(object, approx = FALSE, verbose = FALSE)
     object <- RunUMAP(object, dims = 1:30, verbose = FALSE)
     object <- FindNeighbors(object, dims = 1:30, verbose = FALSE)
     object <- FindClusters(object, verbose = FALSE)
-    # ading metadata to soup channel object
+    # adding metadata to soup channel object needed for automatic estimation of ambient RNA
     meta <- object@meta.data
     umap <- object@reductions$umap@cell.embeddings
     sco <- setClusters(sco, setNames(meta$seurat_clusters, rownames(meta)))
     sco <- setDR(sco, umap)
-    # Analyzing the soup
+    # Analyzing the soup (automatic - function from soupX)
+    # Estimates level of ambient RNA in each sample and removes cells with high levels
     print("Profiling the soup")
     sco <- autoEstCont(sco)
     # Create integer matrix
     adjusted_matrix <- adjustCounts(sco, roundToInt = TRUE)
-    # create directory if needed
+    # Create output directory if needed
     if (!dir.exists(outputs)) dir.create(outputs)
-    # save
+    # Save filtered barcodes, features, and matrix tsv files
     sample_name <- basename(i)
     filename <- paste0(outputs, sample_name)
     print(paste0("Saving filtered objects to: ", filename))
