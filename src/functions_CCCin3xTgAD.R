@@ -13,8 +13,8 @@ remove_ambientRNA <- function(inputs, outputs, plots) {
     set.seed(42)
     # load in cell ranger h5 outputs
     print("Loading cell ranger h5 objects")
-    filt_matrix <- Read10X_h5(paste0(i, "/filtered_feature_bc_matrix.h5"))
-    raw_matrix <- Read10X_h5(paste0(i, "/raw_feature_bc_matrix.h5"))
+    filt_matrix <- Read10X_h5(paste0(i, "/outs/filtered_feature_bc_matrix.h5"))
+    raw_matrix <- Read10X_h5(paste0(i, "/outs/raw_feature_bc_matrix.h5"))
     # create seurat object
     print("Making seurat object")
     object <- CreateSeuratObject(counts = filt_matrix)
@@ -38,10 +38,13 @@ remove_ambientRNA <- function(inputs, outputs, plots) {
     sco <- autoEstCont(sco)
     # Create integer matrix
     adjusted_matrix <- adjustCounts(sco, roundToInt = TRUE)
+    # create directory if needed
+    if (!dir.exists(outputs)) dir.create(outputs)
     # save
-    print("Saving filtered objects")
     sample_name <- basename(i)
-    DropletUtils::write10xCounts(paste0(outputs, sample_name), adjusted_matrix) 
+    filename <- paste0(outputs, sample_name)
+    print(paste0("Saving filtered objects to: ", filename))
+    DropletUtils::write10xCounts(filename, adjusted_matrix) 
   }
   dev.off()
 }
