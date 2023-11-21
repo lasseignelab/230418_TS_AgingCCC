@@ -14,7 +14,7 @@ module load Singularity
 module load CellRanger/6.1.1
 
 ## Variables
-WD="/data/user/lizzyr/code_review/230418_TS_AgingCCC"
+WD="/data/user/tsoelter/230418_TS_AgingCCC"
 
 ID_LIST=(`cat ${WD}/src/cellranger/id_list.txt`) 
 ID_INPUT=`echo ${ID_LIST[$SLURM_ARRAY_TASK_ID]}` 
@@ -30,7 +30,7 @@ mkdir -p ${WD}/data/CellRangerCounts/pre_soupX/
 cd ${WD}/data/CellRangerCounts/pre_soupX/
 
 cellranger count --id=${ID_INPUT} \
-		 --transcriptome=/data/project/lasseigne_lab/JordanWhitlock/jw_refs/refdata-gex-mm10-2020-A \
+		 --transcriptome=/data/user/tsoelter/apps/refdata-gex-mm10-2020-A \
                  --include-introns \
                  --fastqs=/data/project/lasseigne_lab/TabeaSoelter/3xTg_snRNAseq/rawData/ \
                  --sample=${SAMPLE_INPUT}

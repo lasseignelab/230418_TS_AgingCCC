@@ -1,0 +1,363 @@
+---
+title: "01_differential_ccc"
+author: "Tabea M. Soelter"
+date: "2023-11-13"
+output: html_document
+---
+**Differential Cell-Cell Communication Analysis using MultiNicheNet**
+
+__Goal__: Perform MultiNicheNet analyses between AD and WT to identify ligands, receptors, and potential downstream target genes between glia (Astrocytes, Oligodendrocytes, Microglia, and OPCs - senders) and Excitatory/Inhibitory Neurons (receivers).
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.1
+* HPC: Yes
+  * Resources: long partition (150hrs), 1 GPU, 14 CPUs, 45GB per CPU
+
+__Data__:
+*Seurat object*
+* Name: processed_seurat.rds
+* Location: data/seurat/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * Seurat object
+* Load and filter NicheNet v2 prior
+* Prepare for NicheNet
+  * Determine cut-offs and comparisons
+* Differential NicheNet using MultiNicheNet
+  * Wrapper function
+* Save output
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(nichenetr)
+  library(multinichenetr)
+  library(SingleCellExperiment)
+  library(tidyverse)
+  library(tibble)
+  library(Seurat)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+processed_seurat <- readRDS(here(
+  "data",
+  "seurat",
+  "processed_seurat.rds"
+))
+```
+
+# NicheNet-v2 prior
+* downloaded here on 231115: https://zenodo.org/record/7074291
+```{r}
+lr_network <- readRDS(here(
+  "data",
+  "ccc",
+  "nichenet_v2_prior",
+  "lr_network_mouse_21122021.rds"
+)) %>%
+  dplyr::rename(ligand = from, receptor = to) %>%
+  distinct(ligand, receptor) %>%
+  mutate(ligand = make.names(ligand), receptor = make.names(receptor))
+
+ligand_target_matrix <- readRDS(here(
+  "data",
+  "ccc",
+  "nichenet_v2_prior",
+  "ligand_target_matrix_nsga2r_final_mouse.rds"
+))
+
+# format row and column names
+colnames(ligand_target_matrix) <- colnames(ligand_target_matrix) %>%
+  make.names()
+rownames(ligand_target_matrix) <- rownames(ligand_target_matrix) %>%
+  make.names()
+```
+
+# Convert to SCE object
+```{r}
+sce <- Seurat::as.SingleCellExperiment(processed_seurat, assay = "RNA")
+sce <- alias_to_symbol_SCE(sce, "mouse") %>% makenames_SCE()
+```
+
+# Create group column
+As I want to compare CCC between AD and WT for multiple timepoints, I will create a group column which combines the following information:
+  * orig.ident = condition (AD/WT)
+  * timepoint = time point (6m/12m)
+```{r}
+colData(sce)$group <- factor(
+  paste0(colData(sce)$timepoint, colData(sce)$orig.ident)
+)
+```
+
+# Make names syntactically valid
+```{r}
+sce <- make_names_valid(sce)
+```
+
+# Set variables for wrapper
+```{r}
+# sample IDs
+sample_id <- "sample"
+
+# condition information
+group_id <- "group"
+
+# cell type information
+celltype_id <- "ident"
+
+# Other DE variables were denoted as `NA`
+covariates <- NA
+batches <- NA
+
+# Since we have small sample numbers, we do not use adjusted p-values
+empirical_pval <- FALSE
+p_val_adj <- FALSE
+
+# Number of cores of the HPC session
+cores_system <- 14
+```
+
+# Prioritization weights
+* These weights are recommended by the developers of MultiNicheNet. There are more detailed descriptions in the following step-by-step vignette:
+  * https://github.com/saeyslab/multinichenetr/blob/main/vignettes/pairwise_analysis_MISC.md 
+```{r}
+prioritizing_weights_DE <- c(
+  "de_ligand" = 1,
+  "de_receptor" = 1
+)
+
+prioritizing_weights_activity <- c(
+  "activity_scaled" = 2
+)
+
+prioritizing_weights_expression_specificity <- c(
+  "exprs_ligand" = 2,
+  "exprs_receptor" = 2
+)
+
+prioritizing_weights_expression_sufficiency <- c(
+  "frac_exprs_ligand_receptor" = 1
+)
+
+prioritizing_weights_relative_abundance <- c(
+  "abund_sender" = 0,
+  "abund_receiver" = 0
+)
+
+# Combine all weights into 1 variable
+prioritizing_weights <- c(
+  prioritizing_weights_DE,
+  prioritizing_weights_activity,
+  prioritizing_weights_expression_specificity,
+  prioritizing_weights_expression_sufficiency,
+  prioritizing_weights_relative_abundance
+)
+```
+
+# Contrast table
+* The format of the contrast_oi variable requires no spaces, therefore ensure that you don't add spaces to contrast_oi.
+```{r}
+contrasts_oi <- c("'X6mAD-X6mWT','X6mWT-X6mAD','X12mAD-X12mWT','X12mWT-X12mAD'")
+
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+```
+
+# CCC inference
+```{r}
+# path for abundance expression plots
+results_path <- "results/intermediate_outputs/04_ccc"
+
+# this runs for approx 50 minutes
+multinichenet_output <- multinichenet_wrapper(
+  object = sce,
+  results_path = results_path,
+  celltype_id = celltype_id,
+  sample_id = sample_id,
+  group_id = group_id,
+  lr_network = lr_network,
+  batches = batches,
+  contrasts_oi = contrasts_oi,
+  contrast_tbl = contrast_tbl,
+  covariates = covariates,
+  empirical_pval = empirical_pval,
+  p_val_adj = p_val_adj,
+  cores_system = cores_system,
+  ligand_target_matrix = ligand_target_matrix,
+  prioritizing_weights = prioritizing_weights
+)
+```
+
+# Save outputs
+```{r}
+saveRDS(multinichenet_output, here(
+  "data",
+  "ccc",
+  "multinichenet_output.rds"
+))
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats4    stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2                 styler_1.9.1                here_1.0.1                 
+ [4] SeuratObject_4.1.3          Seurat_4.3.0                lubridate_1.9.2            
+ [7] forcats_1.0.0               stringr_1.5.0               dplyr_1.1.1                
+[10] purrr_1.0.1                 readr_2.1.4                 tidyr_1.3.0                
+[13] tibble_3.2.1                ggplot2_3.4.2               tidyverse_2.0.0            
+[16] SingleCellExperiment_1.20.1 SummarizedExperiment_1.28.0 Biobase_2.58.0             
+[19] GenomicRanges_1.50.2        GenomeInfoDb_1.34.9         IRanges_2.32.0             
+[22] S4Vectors_0.36.2            BiocGenerics_0.44.0         MatrixGenerics_1.10.0      
+[25] matrixStats_0.63.0          multinichenetr_1.0.3        nichenetr_2.0.4            
+
+loaded via a namespace (and not attached):
+  [1] rsvd_1.0.5                Hmisc_5.0-1               ica_1.0-3                
+  [4] ps_1.7.5                  class_7.3-21              rprojroot_2.0.3          
+  [7] foreach_1.5.2             lmtest_0.9-40             crayon_1.5.2             
+ [10] rhdf5filters_1.10.1       rbibutils_2.2.13          MASS_7.3-58.3            
+ [13] nlme_3.1-162              backports_1.4.1           sva_3.46.0               
+ [16] rlang_1.1.0               XVector_0.38.0            caret_6.0-94             
+ [19] ROCR_1.0-11               irlba_2.3.5.1             callr_3.7.3              
+ [22] nloptr_2.0.3              limma_3.54.2              scater_1.26.1            
+ [25] BiocParallel_1.32.6       rjson_0.2.21              bit64_4.0.5              
+ [28] glue_1.6.2                sctransform_0.4.1         processx_3.8.1           
+ [31] pbkrtest_0.5.2            parallel_4.2.3            vipor_0.4.5              
+ [34] spatstat.sparse_3.0-1     AnnotationDbi_1.60.2      UpSetR_1.4.0             
+ [37] muscat_1.12.1             spatstat.geom_3.1-0       tidyselect_1.2.0         
+ [40] fitdistrplus_1.1-8        variancePartition_1.28.9  XML_3.99-0.14            
+ [43] zoo_1.8-12                ggpubr_0.6.0              xtable_1.8-4             
+ [46] magrittr_2.0.3            evaluate_0.20             Rdpack_2.4               
+ [49] scuttle_1.8.4             cli_3.6.1                 zlibbioc_1.44.0          
+ [52] rstudioapi_0.14           miniUI_0.1.1.1            sp_1.6-0                 
+ [55] rpart_4.1.19              aod_1.3.2                 locfdr_1.1-8             
+ [58] shiny_1.7.4               BiocSingular_1.14.0       xfun_0.38                
+ [61] clue_0.3-64               cluster_2.1.4             caTools_1.18.2           
+ [64] tidygraph_1.2.3           KEGGREST_1.38.0           clusterGeneration_1.3.7  
+ [67] ggrepel_0.9.3             listenv_0.9.0             Biostrings_2.66.0        
+ [70] png_0.1-8                 future_1.32.0             ipred_0.9-14             
+ [73] withr_2.5.0               bitops_1.0-7              ggforce_0.4.1            
+ [76] plyr_1.8.8                hardhat_1.3.0             dqrng_0.3.0              
+ [79] e1071_1.7-13              pROC_1.18.0               coda_0.19-4              
+ [82] pillar_1.9.0              gplots_3.1.3              GlobalOptions_0.1.2      
+ [85] cachem_1.0.7              GetoptLong_1.0.5          RUnit_0.4.32             
+ [88] DelayedMatrixStats_1.20.0 vctrs_0.6.2               ellipsis_0.3.2           
+ [91] generics_0.1.3            lava_1.7.2.1              tools_4.2.3              
+ [94] foreign_0.8-84            remaCor_0.0.11            beeswarm_0.4.0           
+ [97] munsell_0.5.0             tweenr_2.0.2              emmeans_1.8.5            
+[100] proxy_0.4-27              DelayedArray_0.24.0       fastmap_1.1.1            
+[103] compiler_4.2.3            abind_1.4-5               httpuv_1.6.9             
+[106] plotly_4.10.1             GenomeInfoDbData_1.2.9    prodlim_2023.03.31       
+[109] gridExtra_2.3             glmmTMB_1.1.7             edgeR_3.40.2             
+[112] lattice_0.21-8            ggnewscale_0.4.8          deldir_1.0-6             
+[115] visNetwork_2.1.2          utf8_1.2.3                later_1.3.0              
+[118] recipes_1.0.5             jsonlite_1.8.4            scales_1.2.1             
+[121] ScaledMatrix_1.6.0        carData_3.0-5             pbapply_1.7-0            
+[124] sparseMatrixStats_1.10.0  estimability_1.4.1        genefilter_1.80.3        
+[127] lazyeval_0.2.2            promises_1.2.0.1          car_3.1-2                
+[130] doParallel_1.0.17         R.utils_2.12.2            goftest_1.2-3            
+[133] spatstat.utils_3.0-2      reticulate_1.28           checkmate_2.1.0          
+[136] cyclocomp_1.1.0           rmarkdown_2.21            cowplot_1.1.1            
+[139] blme_1.0-5                statmod_1.5.0             Rtsne_0.16               
+[142] uwot_0.1.14               igraph_1.4.2              HDF5Array_1.26.0         
+[145] yaml_2.3.7                survival_3.5-5            numDeriv_2016.8-1.1      
+[148] htmltools_0.5.5           memoise_2.0.1             locfit_1.5-9.7           
+[151] graphlayouts_0.8.4        viridisLite_0.4.1         digest_0.6.31            
+[154] RhpcBLASctl_0.23-42       mime_0.12                 RSQLite_2.3.1            
+[157] future.apply_1.10.0       remotes_2.4.2             data.table_1.14.8        
+[160] blob_1.2.4                R.oo_1.25.0               DiagrammeR_1.0.9         
+[163] labeling_0.4.2            splines_4.2.3             Formula_1.2-5            
+[166] Rhdf5lib_1.20.0           RCurl_1.98-1.12           broom_1.0.4              
+[169] hms_1.1.3                 rhdf5_2.42.1              DropletUtils_1.18.1      
+[172] colorspace_2.1-0          base64enc_0.1-3           ggbeeswarm_0.7.1         
+[175] shape_1.4.6               nnet_7.3-18               Rcpp_1.0.10              
+[178] RANN_2.6.1                mvtnorm_1.1-3             circlize_0.4.15          
+[181] fansi_1.0.4               tzdb_0.3.0                parallelly_1.35.0        
+[184] ModelMetrics_1.2.2.2      R6_2.5.1                  grid_4.2.3               
+[187] factoextra_1.0.7          ggridges_0.5.4            lifecycle_1.0.3          
+[190] bluster_1.8.0             ggsignif_0.6.4            minqa_1.2.5              
+[193] leiden_0.4.3              Matrix_1.5-4              desc_1.4.2               
+[196] RcppAnnoy_0.0.20          RColorBrewer_1.1-3        iterators_1.0.14         
+[199] spatstat.explore_3.1-0    TMB_1.9.4                 gower_1.0.1              
+[202] R.cache_0.16.0            htmlwidgets_1.6.2         beachmat_2.14.2          
+[205] polyclip_1.10-4           shadowtext_0.1.2          timechange_0.2.0         
+[208] mgcv_1.8-42               ComplexHeatmap_2.14.0     globals_0.16.2           
+[211] htmlTable_2.4.1           patchwork_1.1.2           spatstat.random_3.1-4    
+[214] progressr_0.13.0          codetools_0.2-19          metapod_1.6.0            
+[217] randomForest_4.7-1.1      gtools_3.9.4              prettyunits_1.1.1        
+[220] R.methodsS3_1.8.2         gtable_0.3.3              DBI_1.1.3                
+[223] tensor_1.5                httr_1.4.5                KernSmooth_2.23-20       
+[226] stringi_1.7.12            progress_1.2.2            reshape2_1.4.4           
+[229] farver_2.1.1              annotate_1.76.0           viridis_0.6.2            
+[232] rex_1.2.1                 fdrtool_1.2.17            timeDate_4022.108        
+[235] xml2_1.3.3                boot_1.3-28.1             BiocNeighbors_1.16.0     
+[238] lme4_1.1-32               geneplotter_1.76.0        scattermore_0.8          
+[241] scran_1.26.2              DESeq2_1.38.3             bit_4.0.5                
+[244] spatstat.data_3.0-1       ggraph_2.1.0              pkgconfig_2.0.3          
+[247] lmerTest_3.1-3            rstatix_0.7.2             knitr_1.42
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 1 hour
+# Hands-on time however is between 10-15 minutes!
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "ccc",
+  "01_differential_ccc.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "ccc",
+  "01_differential_ccc.Rmd"
+))
+```

@@ -151,7 +151,7 @@ pdf(file = here(
   "cellcycle_pca.pdf"
 ))
 
-filtered_seurat <- cell_cylce_effects(filtered_seurat)
+filtered_seurat <- cell_cycle_effects(filtered_seurat)
 
 dev.off()
 ```

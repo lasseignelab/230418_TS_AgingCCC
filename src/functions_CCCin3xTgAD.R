@@ -2,7 +2,7 @@
 # Tabea M. Soelter 
 
 ## remove_ambientRNA
-# A function which removes ambient RNA from h5 files outputted from Cell Ranger for single cell data.
+# A function which removes ambient RNA from h5 files from Cell Ranger (inputs) and generates filtered barcodes, features, and matrix tsv files, which serve as input to generate Seurat objects during preprocessing. 
 remove_ambientRNA <- function(inputs, outputs, plots) {
   print("Making list of objects")
   counts_list <- list.dirs(inputs, 
@@ -18,29 +18,30 @@ remove_ambientRNA <- function(inputs, outputs, plots) {
     # create seurat object
     print("Making seurat object")
     object <- CreateSeuratObject(counts = filt_matrix)
-    # make soup channel object
+    # make soup channel object required for soupX
     print("Making soup channel object")
     sco <- SoupChannel(raw_matrix, filt_matrix)
-    # get cluster info
+    # get cluster info (soupX requires very basic level clustering info)
     print("Get cluster info")
     object <- SCTransform(object, verbose = FALSE)
     object <- RunPCA(object, approx = FALSE, verbose = FALSE)
     object <- RunUMAP(object, dims = 1:30, verbose = FALSE)
     object <- FindNeighbors(object, dims = 1:30, verbose = FALSE)
     object <- FindClusters(object, verbose = FALSE)
-    # ading metadata to soup channel object
+    # adding metadata to soup channel object needed for automatic estimation of ambient RNA
     meta <- object@meta.data
     umap <- object@reductions$umap@cell.embeddings
     sco <- setClusters(sco, setNames(meta$seurat_clusters, rownames(meta)))
     sco <- setDR(sco, umap)
-    # Analyzing the soup
+    # Analyzing the soup (automatic - function from soupX)
+    # Estimates level of ambient RNA in each sample and removes cells with high levels
     print("Profiling the soup")
     sco <- autoEstCont(sco)
     # Create integer matrix
     adjusted_matrix <- adjustCounts(sco, roundToInt = TRUE)
-    # create directory if needed
+    # Create output directory if needed
     if (!dir.exists(outputs)) dir.create(outputs)
-    # save
+    # Save filtered barcodes, features, and matrix tsv files
     sample_name <- basename(i)
     filename <- paste0(outputs, sample_name)
     print(paste0("Saving filtered objects to: ", filename))
@@ -258,7 +259,7 @@ convert_human_gene_list <- function(x) {
 
 ## cell_cycle_effects
 # A function which calculates and plots the effect of cell cycle on the data using a filtered seurat object as input. It also performs log normalization, scaling, and dimension reduction using PCA
-cell_cylce_effects <- function(filtered_seurat){
+cell_cycle_effects <- function(filtered_seurat){
   # log normalize -----
   filtered_seurat <- NormalizeData(filtered_seurat)
   # convert human cell cylce markers to mouse -----
@@ -455,6 +456,186 @@ deseq2_dea <- function(cell_types, counts_ls, metadata_ls, group_oi, B, padj_cut
             row.names = FALSE)
 }
 
+## make_names_valid
+# Making names of interested columns valid (no spacing for example)
+# Code adapted from MultiNicheNet
+make_names_valid <- function(object) {
+  SummarizedExperiment::colData(object)$ident <-
+    SummarizedExperiment::colData(object)$ident %>%
+    make.names()
+  SummarizedExperiment::colData(object)$orig.ident <-
+    SummarizedExperiment::colData(object)$orig.ident %>%
+    make.names()
+  SummarizedExperiment::colData(object)$sample <-
+    SummarizedExperiment::colData(object)$sample %>%
+    make.names()
+  SummarizedExperiment::colData(object)$group <-
+    SummarizedExperiment::colData(object)$group %>%
+    make.names()
+  return(object)
+}
 
+## multinichenet_wrapper
+# A wrapper for original MultiNicheNet code
+# Requires a single cell experiment object as input and returns a list of multinichenet outputs, which can be used for visualization. 
+multinichenet_wrapper <- function(object, results_path, celltype_id, sample_id, group_id, lr_network, batches, contrasts_oi, contrast_tbl, covariates, empirical_pval, p_val_adj, cores_system, ligand_target_matrix, prioritizing_weights) {
+  # get sender and receiver cell types from object ---------------
+  senders_oi <- colData(object)[,celltype_id] %>% unique()
+  receivers_oi <- colData(object)[,celltype_id] %>% unique()
+  object <- object[, colData(object)[,celltype_id] %in% c(senders_oi, receivers_oi)]
+  print("Grabbed senders and receivers")
+  # determine whether all cell types have enough cells -----------
+  min_cells <- 10
+  abundance_expression_info <- get_abundance_expression_info(sce = object,
+                                                             sample_id = sample_id,
+                                                             group_id = group_id,
+                                                             celltype_id = celltype_id,
+                                                             min_cells = min_cells,
+                                                             senders_oi = senders_oi,
+                                                             receivers_oi = receivers_oi,
+                                                             lr_network = lr_network,
+                                                             batches = batches)
+  plot1 <- abundance_expression_info$abund_plot_sample
+  plot2 <- abundance_expression_info$abund_plot_group
+  pdf(here(paste0(results_path, "/abundance_expression.pdf")))
+  print(plot1)
+  print(plot2)
+  dev.off()
+  print("Plotted abundance expression")
+  # Get differential expression information
+  DE_info <- get_DE_info(sce = object,
+                         sample_id = sample_id,
+                         group_id = group_id,
+                         celltype_id = celltype_id,
+                         batches = batches,
+                         covariates = covariates,
+                         contrasts_oi = contrasts_oi,
+                         min_cells = min_cells)
+  print("Calculated DE")
+  # Calculate p-values
+  if(empirical_pval == FALSE) {
+    celltype_de <- DE_info$celltype_de$de_output_tidy
+  } else {
+    celltype_de <- DE_info_emp$de_output_tidy_emp %>% dplyr::select(-p_val, -p_adj) %>%
+      dplyr::rename(p_val = p_emp, p_adj = p_adj_emp)
+  }
+  sender_receiver_de = combine_sender_receiver_de(
+    sender_de = celltype_de,
+    receiver_de = celltype_de,
+    senders_oi = senders_oi,
+    receivers_oi = receivers_oi,
+    lr_network = lr_network)
+  print("Calculated p-values")
+  # Identify ligand activities
+  fraction_cutoff <- 0.05
+  n.cores <- min(cores_system, sender_receiver_de$receiver %>% unique() %>% length())
+  if(length(unique(sender_receiver_de$receiver)) > n.cores) {
+    print(paste0("Core req not met. Minimum number of cores needed: ",
+                 length(unique(sender_receiver_de$receiver))))
+    stop()
+  } else {
+    print("Calculating ligand activities")
+    ligand_activities_targets_DEgenes <- suppressMessages(suppressWarnings(
+      get_ligand_activities_targets_DEgenes(
+        receiver_de = celltype_de,
+        receivers_oi = receivers_oi,
+        ligand_target_matrix = ligand_target_matrix,
+        logFC_threshold = 0.50,
+        p_val_threshold = 0.05,
+        p_val_adj = p_val_adj,
+        top_n_target = 250,
+        verbose = FALSE, 
+        n.cores = n.cores
+      )))
+  }
+  # Prepare for prioritization
+  print("Prioritizing interactions")
+  sender_receiver_tbl <- sender_receiver_de %>%
+    dplyr::distinct(sender, receiver)
+  metadata_combined <- colData(object) %>% tibble::as_tibble()
+  if(!is.na(batches)){
+    grouping_tbl <- metadata_combined[,c(sample_id, group_id, batches)] %>%
+      tibble::as_tibble() %>%
+      dplyr::distinct()
+    colnames(grouping_tbl) <- c("sample", "group", batches)
+  } else {
+    grouping_tbl <- metadata_combined[,c(sample_id, group_id)] %>%
+      tibble::as_tibble() %>%
+      dplyr::distinct()
+    colnames(grouping_tbl) <- c("sample", "group")
+  }
+  # Prioritize interactions
+  prioritization_tables <- suppressMessages(generate_prioritization_tables(
+    sender_receiver_info = abundance_expression_info$sender_receiver_info,
+    sender_receiver_de = sender_receiver_de,
+    ligand_activities_targets_DEgenes = ligand_activities_targets_DEgenes,
+    contrast_tbl = contrast_tbl,
+    sender_receiver_tbl = sender_receiver_tbl,
+    grouping_tbl = grouping_tbl,
+    prioritizing_weights = prioritizing_weights,
+    fraction_cutoff = fraction_cutoff, 
+    abundance_data_receiver = abundance_expression_info$abundance_data_receiver,
+    abundance_data_sender = abundance_expression_info$abundance_data_sender
+  ))
+  # Prioritize by correlation coefficients
+  print("Prior knowledge correlations")
+  lr_target_prior_cor <- lr_target_prior_cor_inference(
+    prioritization_tables$group_prioritization_tbl$receiver %>%
+      unique(),
+    abundance_expression_info,
+    celltype_de,
+    grouping_tbl,
+    prioritization_tables,
+    ligand_target_matrix,
+    logFC_threshold = 0.50,
+    p_val_threshold = 0.05,
+    p_val_adj = p_val_adj)
+  # Create combined output
+  print("Creating multinichenet output")
+  multinichenet_output = list(
+    celltype_info = abundance_expression_info$celltype_info,
+    celltype_de = celltype_de,
+    sender_receiver_info = abundance_expression_info$sender_receiver_info,
+    sender_receiver_de =  sender_receiver_de,
+    ligand_activities_targets_DEgenes = ligand_activities_targets_DEgenes,
+    prioritization_tables = prioritization_tables,
+    grouping_tbl = grouping_tbl,
+    lr_target_prior_cor = lr_target_prior_cor
+  )
+  return(multinichenet_output)
+}
 
-
+## filter_nichenet
+# A function that will filter a multinichenet output by pearson and spearman correlation values above/below 0.33/-0.33
+filter_nichenet <- function(object) {
+  # Filter correlated object by pearson and spearman correlations
+  lr_target_prior_cor_filtered <- object$lr_target_prior_cor %>%
+    inner_join(object$ligand_activities_targets_DEgenes$ligand_activities %>%
+                 distinct(ligand, target, direction_regulation, contrast)) %>%
+    inner_join(contrast_tbl) %>%
+    filter(group == group_oi, receiver %in% receiver_oi, sender %in% sender_oi)
+  
+  lr_target_prior_cor_filtered_up <- lr_target_prior_cor_filtered %>%
+    filter(direction_regulation == "up") %>%
+    filter((rank_of_target < top_n_target) & (pearson > 0.33 | spearman > 0.33))
+  
+  lr_target_prior_cor_filtered_down <- lr_target_prior_cor_filtered %>%
+    filter(direction_regulation == "down") %>%
+    filter((rank_of_target < top_n_target) & (pearson < -0.33 | spearman < -0.33))
+  
+  lr_target_prior_cor_filtered <- bind_rows(lr_target_prior_cor_filtered_up,
+                                            lr_target_prior_cor_filtered_down)
+  # Create new column with ligand-receptor-target only info
+  lr_target_prior_cor_filtered$ligand_receptor_target <- gsub(
+    "(_[^_]+_)(.*?)(_[^_]+_)",
+    "\\1\\4",
+    lr_target_prior_cor_filtered$id_target,
+    perl = TRUE)
+  # Create new column with ligand-receptor only info
+  lr_target_prior_cor_filtered$ligand_receptor <- gsub(
+    "^([^_]*_[^_]*).*",
+    "\\1",
+    lr_target_prior_cor_filtered$id,
+    perl = TRUE)
+  return(lr_target_prior_cor_filtered)
+}
