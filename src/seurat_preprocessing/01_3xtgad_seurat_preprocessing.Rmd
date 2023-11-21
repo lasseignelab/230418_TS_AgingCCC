@@ -116,13 +116,16 @@ filtered_seurat <- CreateSeuratObject(filtered_counts,
 
 # Save filtered seurat object
 ```{r}
-saveRDS(filtered_seurat, file = here("data", "seurat", "filtered_seurat.rds"))
+# create directory if needed
+filepath <- here("data", "seurat")
+if (!dir.exists(filepath)) dir.create(filepath)
+saveRDS(filtered_seurat, file = paste0(filepath, "filtered_seurat.rds"))
 ```
 
 # Plot QC metrics after filtering
 ```{r warning=FALSE}
 metadata <- filtered_seurat@meta.data
-dim(metadata) # 194858 12
+dim(metadata) # 194858 12 # LW 184858     12
 
 # plot and save post-filter QC outputs
 pdf(file = here(
@@ -174,10 +177,12 @@ saveRDS(filtered_seurat, file = here("data", "seurat", "integrated_seurat.rds"))
 filtered_seurat@active.assay
 
 # vector of desired resolutions
-resolutions <- c(
-  0.5, 0.6, 0.7, 0.8, 0.9,
-  1.0, 1.1, 1.2, 1.3, 1.4, 1.5
-)
+# resolutions <- c(
+#   0.5, 0.6, 0.7, 0.8, 0.9,
+#   1.0, 1.1, 1.2, 1.3, 1.4, 1.5
+# )
+# selected resolution
+resolutions <- 0.7
 
 # clustering of resolutions (answer no to miniconda installation)
 filtered_seurat <- find_clusters(filtered_seurat,
