@@ -54,6 +54,16 @@ suppressPackageStartupMessages({
 source(here("src", "functions_CCCin3xTgAD.R"))
 ```
 
+# Create output directories
+```{r}
+# seurat object directory
+"/data/seurat/"
+
+# figure directories CONFIRM ME
+"/results/intermediate_outputs/02_seurat/"
+"/results/final_outputs/02_seurat/"
+```
+
 # Create seurat object
 ```{r}
 merged_seurat <- make_seurat_object(here(
@@ -164,192 +174,6 @@ filtered_seurat <- harmony_integration(filtered_seurat, dims = 1:20)
 # Save integrated seurat object
 ```{r}
 saveRDS(filtered_seurat, file = here("data", "seurat", "integrated_seurat.rds"))
-```
-
-# Clustering
-* Since I am using harmony for integration, I will have to ensure to use the RNA assay and the harmony reduction for everything downstream.
-* I am using Leiden for clustering in my find_clusters function. 
-```{r warning=FALSE}
-# check active assay (needs to be RNA)
-filtered_seurat@active.assay
-
-# vector of desired resolutions
-resolutions <- c(
-  0.5, 0.6, 0.7, 0.8, 0.9,
-  1.0, 1.1, 1.2, 1.3, 1.4, 1.5
-)
-
-# clustering of resolutions (answer no to miniconda installation)
-filtered_seurat <- find_clusters(filtered_seurat,
-  dims = 1:20,
-  reduction = "harmony",
-  resolutions = resolutions
-)
-```
-
-# Save clustered seurat object
-```{r}
-saveRDS(filtered_seurat, file = here("data", "seurat", "clustered_seurat.rds"))
-```
-
-# Determine resolution
-```{r}
-# Plot resolutions between 0.1 and 0.9
-tree <- clustree(filtered_seurat@meta.data, prefix = "RNA_snn_res.0.")
-
-# Resolutions between 1 and 1.9
-tree2 <- clustree(filtered_seurat@meta.data, prefix = "RNA_snn_res.1.")
-
-pdf(file = here(
-  "results",
-  "intermediate_outputs",
-  "02_seurat",
-  "clustree_umap.pdf"
-))
-
-tree
-tree2
-
-# plotting UMAP for most stable resolution (0.7)
-DimPlot(filtered_seurat,
-  reduction = "umap_harmony",
-  group.by = "RNA_snn_res.0.7"
-)
-
-dev.off()
-```
-
-# Find marker genes
-```{r}
-# Set the identity as Leiden with resolution 0.7
-filtered_seurat <- SetIdent(filtered_seurat, value = "RNA_snn_res.0.7")
-
-# Find marker genes
-all_marker_genes <- FindAllMarkers(filtered_seurat,
-  log2FC.threshold = 0.2,
-  test.use = "wilcox",
-  min.pct = 0.1,
-  only.pos = TRUE,
-  max.cells.per.ident = 50,
-  assay = "RNA"
-)
-
-# Save marker genes
-saveRDS(all_marker_genes, here(
-  "results",
-  "intermediate_outputs",
-  "02_seurat",
-  "all_marker_genes.rds"
-))
-
-# Look at the top 25 up-regulated genes
-top25 <- all_marker_genes %>%
-  group_by(cluster) %>%
-  top_n(-25, p_val_adj)
-
-dim(top25) # 1074 7
-```
-
-# Neuronal marker FeaturePlots
-* As no markers from PanglaoDB indicated whether Neurons are excitatory or inhibitory, I am using feature plots and known canonical markers to identify neuronal clusters as ex or in.
-* I was able to assign all neuron clusters as excitatory or inhibitory to most neuron clusters (cluster 4 excluded).
-```{r}
-pdf(file = here(
-  "results",
-  "intermediate_outputs",
-  "02_seurat",
-  "neurons_feature_plots.pdf"
-))
-
-# Slc17a7 (Excitatory Neurons) vs Gad2 (Inhibitory Neurons)
-FeaturePlot(filtered_seurat, features = c("Slc17a7", "Gad2"), label = TRUE)
-FeaturePlot(filtered_seurat, features = c("Slc17a7", "Gad2"), label = FALSE)
-
-# Slc17a6 (Excitatory Neurons) vs Gad1 (Inhibitory Neurons)
-FeaturePlot(filtered_seurat, features = c("Slc17a6", "Gad1"), label = TRUE)
-FeaturePlot(filtered_seurat, features = c("Slc17a6", "Gad1"), label = FALSE)
-
-dev.off()
-```
-
-# Finding markers of unresolved clusters
-* Clusters unidentified are: 15, 22, 35, 38
-```{r}
-# vector of clusters of interest
-identities <- c("15", "22", "35", "38")
-
-# find marker genes across clusters of interest
-top_markers <- find_markers(filtered_seurat,
-  resolution = "RNA_snn_res.0.7",
-  identities = identities,
-  value = 15
-)
-
-dim(top_markers) # 60 6
-```
-
-# Assign cell types
-```{r}
-filtered_seurat <- RenameIdents(filtered_seurat,
-  `1`  = "Astrocytes",
-  `2`  = "Excitatory Neurons",
-  `3`  = "Oligodendrocytes",
-  `4`  = "Inhibitory Neurons",
-  `5`  = "Inhibitory Neurons",
-  `6`  = "Inhibitory Neurons",
-  `7`  = "Excitatory Neurons",
-  `8`  = "Oligodendrocytes",
-  `9`  = "Excitatory Neurons",
-  `10` = "Excitatory Neurons",
-  `11` = "Excitatory Neurons",
-  `12` = "OPCs",
-  `13` = "Inhibitory Neurons",
-  `14` = "Vasculature cells",
-  `15` = "Ependymal cells",
-  `16` = "Oligodendrocytes",
-  `17` = "Excitatory Neurons",
-  `18` = "Microglia",
-  `19` = "Astrocytes",
-  `20` = "Inhibitory Neurons",
-  `21` = "Excitatory Neurons",
-  `22` = "Unknown",
-  `23` = "Inhibitory Neurons",
-  `24` = "Inhibitory Neurons",
-  `25` = "Inhibitory Neurons",
-  `26` = "Excitatory Neurons",
-  `27` = "Vasculature cells",
-  `28` = "Inhibitory Neurons",
-  `29` = "Astrocytes",
-  `30` = "Excitatory Neurons",
-  `31` = "Endothelial cells",
-  `32` = "OPCs",
-  `33` = "Inhibitory Neurons",
-  `34` = "Excitatory Neurons",
-  `35` = "Vasculature cells",
-  `36` = "Excitatory Neurons",
-  `37` = "Microglia",
-  `38` = "Retinal ganglion cells",
-  `39` = "OPCs",
-  `40` = "Inhibitory Neurons",
-  `41` = "Vasculature cells",
-  `42` = "Excitatory Neurons"
-)
-```
-
-# Plot final UMAP
-```{r}
-png(file = here("results", "final_outputs", "02_seurat", "UMAP_final.png"))
-DimPlot_scCustom(filtered_seurat,
-  figure_plot = TRUE,
-  label = FALSE,
-  ggplot_default_colors = TRUE
-)
-dev.off()
-```
-
-# Save processed seurat object
-```{r}
-saveRDS(filtered_seurat, here("data", "seurat", "processed_seurat.rds"))
 ```
 
 # Session info
