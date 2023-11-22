@@ -1,13 +1,22 @@
 #!/bin/bash
-#SBATCH --job-name CellRanger
-#SBATCH --error=logs/%j.%N.err.txt
-#SBATCH --output=logs/%j.%N.out.txt
-#SBATCH --ntasks=2  ## number of tasks (analyses) to run, i.e. # of nodes to request resource from
-#SBATCH --cpus-per-task=4  ## the number of threads allocated to each task
-#SBATCH --mem-per-cpu=64G   # memory per CPU core
-#SBATCH --partition=medium  ## the partition to run in (short == 12h max run time)
-#SBATCH --array=0-11 #12 samples
+#
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=tsoelter@uab.edu
+#SBATCH --job-name=CellRanger
+#SBATCH --ntasks=4
+#SBATCH --mem-per-cpu=64000
+#SBATCH --nodes=1
+#SABTCH --cpus-per-task=4
+#SBATCH --time=2-00:00:00
+#SBATCH --share
+#SBATCH --partition=medium
+#SBATCH --error=%A_%a.err.txt
+#SBATCH --output=S%A_%a.out.txt
+#SBATCH --array=0-11
 
+########################################
+### PUT YOUR COMMANDS BELOW THIS BOX ###
+########################################
 
 ## Load modules
 module load Singularity
