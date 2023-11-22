@@ -309,6 +309,7 @@ find_clusters <- function(object, dims, reduction, resolutions) {
                           reduction = reduction)
   # clustering (Leiden aka algorithm 4)
   for (res in resolutions) {
+    print(res)
     object <- FindClusters(object,
                            graph.name = "RNA_snn",
                            resolution = res,
