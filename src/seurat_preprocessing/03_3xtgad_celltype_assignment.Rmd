@@ -1,0 +1,308 @@
+---
+title: "03_3xtgad_celltype_assignment"
+author: "Tabea M. Soelter"
+date: "2023-11-21"
+output: html_document
+---
+**Cell-type assignment for 3xTgAD mouse data**
+
+__Goal__: Assign cell types for the 3xTgAD (snRNA-seq) data for downstream analyses.
+  
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.0 
+* HPC: Yes
+  * Resources: long partition (150hrs), 6 CPUs, 65GB per CPU
+
+__Data__:
+* Name: clustered_seurat.rds
+* Location: /data/user/tsoelter/projects/230418_TS_AgingCCC/data/seurat/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data 
+* Cluster at most stable resolution
+* Find marker genes
+* Assign cell types using marker genes and feature plots
+* Save processed seurat object
+
+__Analysis__:
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(tidyverse)
+  library(stringr)
+  library(scCustomize)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Clustering
+__NOTE: ONLY RUN THIS CHUNK IF YOU DID NOT RUN OPTIONAL 02_3xtgad_clustering.R/sh SCRIPTS__
+__* Skip to line 75 if you did run the above scripts__
+  * 02 scripts were needed to determine most stable resolution (0.7)
+```{r eval=FALSE, warning=FALSE, include=FALSE}
+# load integrated seurat object
+filtered_seurat <- readRDS(here("data", "seurat", "integrated_seurat.rds"))
+
+# check active assay (needs to be RNA)
+filtered_seurat@active.assay
+
+# clustering of most stable resolution (determined using clustree - 02 scripts)
+filtered_seurat <- find_clusters(filtered_seurat,
+  dims = 1:20,
+  reduction = "harmony",
+  resolutions = 0.7
+)
+
+# save clustered object
+saveRDS(filtered_seurat, file = here("data", "seurat", "clustered_seurat.rds"))
+```
+
+# Load clustered seurat object
+```{r}
+filtered_seurat <- readRDS(here("data", "seurat", "clustered_seurat.rds"))
+```
+
+# Find marker genes
+```{r}
+# Set the identity as Leiden with resolution 0.7
+filtered_seurat <- SetIdent(filtered_seurat, value = "RNA_snn_res.0.7")
+
+# Find marker genes
+all_marker_genes <- FindAllMarkers(filtered_seurat,
+  log2FC.threshold = 0.2,
+  test.use = "wilcox",
+  min.pct = 0.1,
+  only.pos = TRUE,
+  max.cells.per.ident = 50,
+  assay = "RNA"
+)
+
+# Save marker genes
+saveRDS(all_marker_genes, here(
+  "results",
+  "intermediate_outputs",
+  "02_seurat",
+  "all_marker_genes.rds"
+))
+
+# Look at the top 25 up-regulated genes
+top25 <- all_marker_genes %>%
+  group_by(cluster) %>%
+  top_n(-25, p_val_adj)
+
+dim(top25) # 1000 7
+```
+
+# Neuronal marker FeaturePlots
+* As no markers from PanglaoDB indicated whether Neurons are excitatory or inhibitory, I am using feature plots and known canonical markers to identify neuronal clusters as ex or in.
+* I was able to assign all neuron clusters as excitatory or inhibitory to most neuron clusters (cluster 4 excluded).
+```{r}
+pdf(file = here(
+  "results",
+  "intermediate_outputs",
+  "02_seurat",
+  "neurons_feature_plots.pdf"
+))
+
+# Slc17a7 (Excitatory Neurons) vs Gad2 (Inhibitory Neurons)
+FeaturePlot(filtered_seurat, features = c("Slc17a7", "Gad2"), label = TRUE)
+FeaturePlot(filtered_seurat, features = c("Slc17a7", "Gad2"), label = FALSE)
+
+# Slc17a6 (Excitatory Neurons) vs Gad1 (Inhibitory Neurons)
+FeaturePlot(filtered_seurat, features = c("Slc17a6", "Gad1"), label = TRUE)
+FeaturePlot(filtered_seurat, features = c("Slc17a6", "Gad1"), label = FALSE)
+
+dev.off()
+```
+
+# Finding markers of unresolved clusters
+* Clusters unidentified are: 15, 22, 35, 38
+```{r}
+# vector of clusters of interest
+identities <- c("15", "22", "35", "38")
+
+# find marker genes across clusters of interest
+top_markers <- find_markers(filtered_seurat,
+  resolution = "RNA_snn_res.0.7",
+  identities = identities,
+  value = 15
+)
+
+dim(top_markers) # 60 6
+```
+
+# Assign cell types
+```{r}
+filtered_seurat <- RenameIdents(filtered_seurat,
+  `1`  = "Astrocytes",
+  `2`  = "Excitatory Neurons",
+  `3`  = "Oligodendrocytes",
+  `4`  = "Inhibitory Neurons",
+  `5`  = "Inhibitory Neurons",
+  `6`  = "Inhibitory Neurons",
+  `7`  = "Excitatory Neurons",
+  `8`  = "Oligodendrocytes",
+  `9`  = "Excitatory Neurons",
+  `10` = "Excitatory Neurons",
+  `11` = "Excitatory Neurons",
+  `12` = "OPCs",
+  `13` = "Inhibitory Neurons",
+  `14` = "Vasculature cells",
+  `15` = "Ependymal cells",
+  `16` = "Oligodendrocytes",
+  `17` = "Excitatory Neurons",
+  `18` = "Microglia",
+  `19` = "Astrocytes",
+  `20` = "Inhibitory Neurons",
+  `21` = "Excitatory Neurons",
+  `22` = "Unknown",
+  `23` = "Inhibitory Neurons",
+  `24` = "Inhibitory Neurons",
+  `25` = "Inhibitory Neurons",
+  `26` = "Excitatory Neurons",
+  `27` = "Vasculature cells",
+  `28` = "Inhibitory Neurons",
+  `29` = "Astrocytes",
+  `30` = "Excitatory Neurons",
+  `31` = "Endothelial cells",
+  `32` = "OPCs",
+  `33` = "Inhibitory Neurons",
+  `34` = "Excitatory Neurons",
+  `35` = "Vasculature cells",
+  `36` = "Excitatory Neurons",
+  `37` = "Microglia",
+  `38` = "Retinal ganglion cells",
+  `39` = "OPCs",
+  `40` = "Inhibitory Neurons",
+  `41` = "Vasculature cells",
+  `42` = "Excitatory Neurons"
+)
+```
+
+# Plot final UMAP
+```{r}
+png(file = here("results", "final_outputs", "02_seurat", "UMAP_final.png"))
+DimPlot(filtered_seurat)
+dev.off()
+```
+
+# Save processed seurat object
+```{r}
+saveRDS(filtered_seurat, here("data", "seurat", "processed_seurat.rds"))
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2        styler_1.9.1       here_1.0.1         scCustomize_1.1.1 
+ [5] lubridate_1.9.2    forcats_1.0.0      stringr_1.5.0      dplyr_1.1.1       
+ [9] purrr_1.0.1        readr_2.1.4        tidyr_1.3.0        tibble_3.2.1      
+[13] ggplot2_3.4.2      tidyverse_2.0.0    SeuratObject_4.1.3 Seurat_4.3.0      
+
+loaded via a namespace (and not attached):
+  [1] circlize_0.4.15        plyr_1.8.8             igraph_1.4.2          
+  [4] lazyeval_0.2.2         sp_1.6-0               splines_4.2.3         
+  [7] listenv_0.9.0          scattermore_0.8        digest_0.6.31         
+ [10] htmltools_0.5.5        fansi_1.0.4            magrittr_2.0.3        
+ [13] tensor_1.5             paletteer_1.5.0        cluster_2.1.4         
+ [16] ROCR_1.0-11            limma_3.54.2           remotes_2.4.2         
+ [19] tzdb_0.3.0             globals_0.16.2         matrixStats_0.63.0    
+ [22] R.utils_2.12.2         timechange_0.2.0       spatstat.sparse_3.0-1 
+ [25] colorspace_2.1-0       ggrepel_0.9.3          xfun_0.38             
+ [28] callr_3.7.3            crayon_1.5.2           jsonlite_1.8.4        
+ [31] progressr_0.13.0       spatstat.data_3.0-1    survival_3.5-5        
+ [34] zoo_1.8-12             glue_1.6.2             polyclip_1.10-4       
+ [37] gtable_0.3.3           leiden_0.4.3           R.cache_0.16.0        
+ [40] future.apply_1.10.0    shape_1.4.6            abind_1.4-5           
+ [43] scales_1.2.1           spatstat.random_3.1-4  miniUI_0.1.1.1        
+ [46] Rcpp_1.0.10            viridisLite_0.4.1      xtable_1.8-4          
+ [49] reticulate_1.28        htmlwidgets_1.6.2      rex_1.2.1             
+ [52] httr_1.4.5             RColorBrewer_1.1-3     ellipsis_0.3.2        
+ [55] ica_1.0-3              farver_2.1.1           pkgconfig_2.0.3       
+ [58] R.methodsS3_1.8.2      uwot_0.1.14            deldir_1.0-6          
+ [61] utf8_1.2.3             janitor_2.2.0          labeling_0.4.2        
+ [64] tidyselect_1.2.0       rlang_1.1.0            reshape2_1.4.4        
+ [67] later_1.3.0            munsell_0.5.0          tools_4.2.3           
+ [70] cli_3.6.1              ggprism_1.0.4          generics_0.1.3        
+ [73] ggridges_0.5.4         evaluate_0.20          fastmap_1.1.1         
+ [76] yaml_2.3.7             goftest_1.2-3          rematch2_2.1.2        
+ [79] processx_3.8.1         knitr_1.42             fitdistrplus_1.1-8    
+ [82] RANN_2.6.1             pbapply_1.7-0          future_1.32.0         
+ [85] nlme_3.1-162           mime_0.12              ggrastr_1.0.1         
+ [88] R.oo_1.25.0            xml2_1.3.3             compiler_4.2.3        
+ [91] rstudioapi_0.14        beeswarm_0.4.0         plotly_4.10.1         
+ [94] png_0.1-8              spatstat.utils_3.0-2   stringi_1.7.12        
+ [97] cyclocomp_1.1.0        ps_1.7.5               desc_1.4.2            
+[100] lattice_0.21-8         Matrix_1.5-4           vctrs_0.6.2           
+[103] pillar_1.9.0           lifecycle_1.0.3        spatstat.geom_3.1-0   
+[106] lmtest_0.9-40          GlobalOptions_0.1.2    RcppAnnoy_0.0.20      
+[109] data.table_1.14.8      cowplot_1.1.1          irlba_2.3.5.1         
+[112] httpuv_1.6.9           patchwork_1.1.2        R6_2.5.1              
+[115] promises_1.2.0.1       KernSmooth_2.23-20     gridExtra_2.3         
+[118] vipor_0.4.5            parallelly_1.35.0      codetools_0.2-19      
+[121] MASS_7.3-58.3          rprojroot_2.0.3        withr_2.5.0           
+[124] sctransform_0.4.1      parallel_4.2.3         hms_1.1.3             
+[127] grid_4.2.3             rmarkdown_2.21         snakecase_0.11.0      
+[130] Rtsne_0.16             spatstat.explore_3.1-0 shiny_1.7.4           
+[133] ggbeeswarm_0.7.1
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 45 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "seurat_preprocessing",
+  "03_3xtgad_celltype_assignment.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "seurat_preprocessing",
+  "03_3xtgad_celltype_assignment.Rmd"
+))
+```
