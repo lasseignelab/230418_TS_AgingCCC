@@ -20,10 +20,9 @@ module load Singularity/3.5.2-GCC-5.4.0-2.26
 
 # set variables
 wd="/data/user/tsoelter/projects/230418_TS_AgingCCC"
-src="/data/user/tsoelter/projects/230418_TS_AgingCCC/src/seurat_preprocessing"
 
 export SINGULARITYENV_PASSWORD='pass'
-export SINGULARITYENV_USER='tsoelter'
+export SINGULARITYENV_USER=$USER
 
 # file path to functions script
 INPUT="${wd}/src/functions_CCCin3xTgAD.R"
@@ -35,4 +34,9 @@ INPUT2="${wd}/data/seurat/integrated_seurat.rds"
 INPUT3="${wd}"
 
 # execute docker
-singularity exec --cleanenv --containall -B ${wd} ${wd}/bin/docker/rstudio_aging_ccc_1.0.0.sif Rscript --vanilla ${src}/02_3xtgad_clustering.R ${INPUT} ${INPUT2} ${INPUT3}
+singularity exec \
+--cleanenv \
+--containall \
+-B ${wd} \
+${wd}/bin/docker/rstudio_aging_ccc_1.0.0.sif \
+Rscript --vanilla ${wd}/src/02_3xtgad_clustering.R ${INPUT} ${INPUT2} ${INPUT3}
