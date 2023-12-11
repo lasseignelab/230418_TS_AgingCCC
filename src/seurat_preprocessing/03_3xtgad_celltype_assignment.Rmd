@@ -110,7 +110,7 @@ dim(top25) # 1000 7
 
 # Neuronal marker FeaturePlots
 * As no markers from PanglaoDB indicated whether Neurons are excitatory or inhibitory, I am using feature plots and known canonical markers to identify neuronal clusters as ex or in.
-* I was able to assign all neuron clusters as excitatory or inhibitory to most neuron clusters (cluster 4 excluded).
+* I was able to assign all neuron clusters as excitatory or inhibitory to most neuron clusters.
 ```{r}
 pdf(file = here(
   "results",
@@ -129,12 +129,75 @@ FeaturePlot(filtered_seurat, features = c("Slc17a6", "Gad1"), label = FALSE)
 
 dev.off()
 ```
+# Feature plots for specific clusters
+* After initial cell type assignment, some clusters's identities remained unknown. 
+  * Cluster 14: Pericytes, Endothelial cells, or Fibroblasts
+  * Cluster 24: Most likely Ependymal cells, but want to confirm
+  * Cluster 27: Most likely Fibroblasts, but want to confirm
+  * Cluster 29: Pericytes or Endothelial cells
+  * Cluster 31: Astrocytes or Oligodendrocytes
+```{r}
+pdf(file = here(
+  "results",
+  "intermediate_outputs",
+  "02_seurat",
+  "feature_plots.pdf"
+))
+
+# Slc1a2 (Astrocytes) vs Mbp (Oligodendrocytes)
+FeaturePlot(filtered_seurat,
+  features = c("Slc1a2", "Mbp"),
+  label = TRUE
+)
+FeaturePlot(filtered_seurat,
+  features = c("Slc1a2", "Mbp"),
+  label = FALSE
+)
+
+# Gpc5 (Astrocytes) vs Plp1 (Oligodendrocytes)
+FeaturePlot(filtered_seurat,
+  features = c("Gpc5", "Plp1"),
+  label = TRUE
+)
+FeaturePlot(filtered_seurat,
+  features = c("Gpc5", "Plp1"),
+  label = FALSE
+)
+
+# Fibroblast markers
+FeaturePlot(filtered_seurat,
+  features = c("Col1a1", "Col3a1", "Dcn"),
+  label = TRUE
+)
+
+# Ependymal cell markers
+FeaturePlot(filtered_seurat,
+  features = c("Rmst", "Dnah6", "Spag16"),
+  label = TRUE
+)
+
+# Pericytes markers
+FeaturePlot(filtered_seurat,
+  features = c("Pdgfrb", "Cald1"),
+  label = TRUE
+)
+
+# Endothelial cell markers
+FeaturePlot(filtered_seurat,
+  features = c("Flt1", "Cldn5"),
+  label = TRUE
+)
+
+dev.off()
+```
 
 # Finding markers of unresolved clusters
-* Clusters unidentified are: 15, 22, 35, 38
+* Clusters unidentified are: 14 and 31
+* I am fairly certain that cluster 14 will just be Meningeal cells, as it expresses markers of multiple different cell types associated with the Meninges 
+* I am also confident that cluster 31 will be either Astrocytes or Oligodendrocytes. Feature plots of Astrocytes and Oligodendrocyte markers showed strong expression of both.
 ```{r}
 # vector of clusters of interest
-identities <- c("15", "22", "35", "38")
+identities <- c("14", "31")
 
 # find marker genes across clusters of interest
 top_markers <- find_markers(filtered_seurat,
@@ -143,54 +206,52 @@ top_markers <- find_markers(filtered_seurat,
   value = 15
 )
 
-dim(top_markers) # 60 6
+dim(top_markers) # 30 6
 ```
 
 # Assign cell types
 ```{r}
 filtered_seurat <- RenameIdents(filtered_seurat,
-  `1`  = "Astrocytes",
-  `2`  = "Excitatory Neurons",
-  `3`  = "Oligodendrocytes",
-  `4`  = "Inhibitory Neurons",
+  `1`  = "Excitatory Neurons",
+  `2`  = "Astrocytes",
+  `3`  = "Inhibitory Neurons",
+  `4`  = "Oligodendrocytes",
   `5`  = "Inhibitory Neurons",
-  `6`  = "Inhibitory Neurons",
-  `7`  = "Excitatory Neurons",
-  `8`  = "Oligodendrocytes",
+  `6`  = "Oligodendrocytes",
+  `7`  = "Inhibitory Neurons",
+  `8`  = "Excitatory Neurons",
   `9`  = "Excitatory Neurons",
   `10` = "Excitatory Neurons",
   `11` = "Excitatory Neurons",
   `12` = "OPCs",
   `13` = "Inhibitory Neurons",
-  `14` = "Vasculature cells",
-  `15` = "Ependymal cells",
+  `14` = "Meningeal cells",
+  `15` = "Inhibitory Neurons",
   `16` = "Oligodendrocytes",
   `17` = "Excitatory Neurons",
   `18` = "Microglia",
   `19` = "Astrocytes",
-  `20` = "Inhibitory Neurons",
+  `20` = "Excitatory Neurons",
   `21` = "Excitatory Neurons",
-  `22` = "Unknown",
+  `22` = "Ependymal cells",
   `23` = "Inhibitory Neurons",
-  `24` = "Inhibitory Neurons",
+  `24` = "Ependymal cells",
   `25` = "Inhibitory Neurons",
-  `26` = "Excitatory Neurons",
-  `27` = "Vasculature cells",
+  `26` = "Inhibitory Neurons",
+  `27` = "Fibroblasts",
   `28` = "Inhibitory Neurons",
-  `29` = "Astrocytes",
+  `29` = "Pericytes",
   `30` = "Excitatory Neurons",
-  `31` = "Endothelial cells",
-  `32` = "OPCs",
-  `33` = "Inhibitory Neurons",
-  `34` = "Excitatory Neurons",
-  `35` = "Vasculature cells",
-  `36` = "Excitatory Neurons",
-  `37` = "Microglia",
-  `38` = "Retinal ganglion cells",
-  `39` = "OPCs",
-  `40` = "Inhibitory Neurons",
-  `41` = "Vasculature cells",
-  `42` = "Excitatory Neurons"
+  `31` = "Astrocytes",
+  `32` = "Endothelial cells",
+  `33` = "OPCs",
+  `34` = "Inhibitory Neurons",
+  `35` = "Excitatory Neurons",
+  `36` = "Microglia",
+  `37` = "RGCs",
+  `38` = "OPCs",
+  `39` = "Excitatory Neurons",
+  `40` = "OPCs"
 )
 ```
 
@@ -243,14 +304,14 @@ loaded via a namespace (and not attached):
  [19] tzdb_0.3.0             globals_0.16.2         matrixStats_0.63.0    
  [22] R.utils_2.12.2         timechange_0.2.0       spatstat.sparse_3.0-1 
  [25] colorspace_2.1-0       ggrepel_0.9.3          xfun_0.38             
- [28] callr_3.7.3            crayon_1.5.2           jsonlite_1.8.4        
+ [28] crayon_1.5.2           callr_3.7.3            jsonlite_1.8.4        
  [31] progressr_0.13.0       spatstat.data_3.0-1    survival_3.5-5        
  [34] zoo_1.8-12             glue_1.6.2             polyclip_1.10-4       
  [37] gtable_0.3.3           leiden_0.4.3           R.cache_0.16.0        
  [40] future.apply_1.10.0    shape_1.4.6            abind_1.4-5           
  [43] scales_1.2.1           spatstat.random_3.1-4  miniUI_0.1.1.1        
  [46] Rcpp_1.0.10            viridisLite_0.4.1      xtable_1.8-4          
- [49] reticulate_1.28        htmlwidgets_1.6.2      rex_1.2.1             
+ [49] reticulate_1.28        rex_1.2.1              htmlwidgets_1.6.2     
  [52] httr_1.4.5             RColorBrewer_1.1-3     ellipsis_0.3.2        
  [55] ica_1.0-3              farver_2.1.1           pkgconfig_2.0.3       
  [58] R.methodsS3_1.8.2      uwot_0.1.14            deldir_1.0-6          
@@ -266,7 +327,7 @@ loaded via a namespace (and not attached):
  [88] R.oo_1.25.0            xml2_1.3.3             compiler_4.2.3        
  [91] rstudioapi_0.14        beeswarm_0.4.0         plotly_4.10.1         
  [94] png_0.1-8              spatstat.utils_3.0-2   stringi_1.7.12        
- [97] cyclocomp_1.1.0        ps_1.7.5               desc_1.4.2            
+ [97] ps_1.7.5               cyclocomp_1.1.0        desc_1.4.2            
 [100] lattice_0.21-8         Matrix_1.5-4           vctrs_0.6.2           
 [103] pillar_1.9.0           lifecycle_1.0.3        spatstat.geom_3.1-0   
 [106] lmtest_0.9-40          GlobalOptions_0.1.2    RcppAnnoy_0.0.20      
@@ -287,7 +348,7 @@ fptm <- proc.time() - ptm
 # convert to minutes
 (fptm[3] / 60)
 
-# Time elapsed: 45 minutes
+# Time elapsed: 40 minutes
 ```
 
 # Reproducibility
