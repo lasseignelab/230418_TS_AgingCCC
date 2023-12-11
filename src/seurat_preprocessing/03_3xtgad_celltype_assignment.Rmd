@@ -105,7 +105,7 @@ top25 <- all_marker_genes %>%
   group_by(cluster) %>%
   top_n(-25, p_val_adj)
 
-dim(top25) # TS 1000 7
+dim(top25) # 1000 7
 ```
 
 # Neuronal marker FeaturePlots
