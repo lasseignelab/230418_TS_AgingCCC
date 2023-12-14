@@ -1,0 +1,207 @@
+---
+title: "04_3xtgad_seurat_preprocessing"
+author: "Tabea M. Soelter"
+date: "2023-05-08"
+output: html_document
+---
+**Pre-processing of 3xTgAD mouse data**
+
+__Goal__: Process 3xTgAD (snRNA-seq) data for downstream analyses. The data consists of 2 time points (6 and 12 months), 2 conditions (AD, CTRL), and 1 sex (female).
+  
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.0 
+* HPC: Yes
+  * Resources: long partition (150hrs), 6 CPUs, 65GB per CPU
+
+__Data__:
+* Name: N/A
+* Location: /data/user/tsoelter/projects/230418_TS_AgingCCC/data/CellRangerCounts/
+
+__Analysis Plan__:
+* Load necessary packages 
+* Load data 
+* Create seurat object
+* Perform quality control and filtering
+* Integration
+* Clustering and cell type assignment
+* Save integrated seurat object
+
+__Analysis__:
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(Seurat)
+  library(tidyverse)
+  library(harmony)
+  library(clustree)
+  library(stringr)
+  library(scCustomize)
+  # remove 1 depending on cell cycle results after LW
+  library(biomaRt)
+  library(gprofiler2)
+  # see above
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Create seurat data directory
+```{r}
+if (!dir.exists(here("data", "seurat"))) dir.create(here("data", "seurat"))
+```
+
+# Create seurat object
+```{r}
+merged_seurat <- make_seurat_object(here(
+  "data",
+  "CellRangerCounts",
+  "post_soupX"
+))
+```
+
+# Calculate QC metrics
+```{r}
+merged_seurat <- calculate_qc(merged_seurat)
+```
+
+# Format metadata
+```{r}
+metadata <- format_metadata(merged_seurat)
+dim(metadata) # 185643 9
+
+# Add metadata to merged_seurat
+merged_seurat@meta.data <- metadata
+```
+
+# Plot QC metrics
+```{r warning=FALSE}
+pdf(file = here("results", "intermediate_outputs", "02_seurat", "qc_plots.pdf"))
+plot_qc(metadata)
+dev.off()
+```
+
+# Filtering 
+* Performing cell-level and gene-level filtering on the data. 
+  * Cell-level filtering is performed based on the plotted QC metrics (above).
+  * Gene-level filtering aims at removing count values = 0, since they can skew average gene expression measurements.
+  * Discussed in the following review: https://genomebiology.biomedcentral.com/articles/10.1186/s13059-022-02601-5)
+```{r}
+# Cell-level filtering
+sub_seurat <- subset(merged_seurat,
+  subset =
+    nGene > 500 &
+      nGene < 10000 &
+      mitoRatio < 0.05 &
+      log10GenesPerUMI > 0.80
+)
+
+# Gene-level filtering
+counts <- GetAssayData(sub_seurat, slot = "counts")
+
+nonzero <- counts > 0
+
+keep_genes <- rowSums(nonzero) >= 10
+
+filtered_counts <- counts[keep_genes, ]
+
+filtered_seurat <- CreateSeuratObject(filtered_counts,
+  meta.data = sub_seurat@meta.data
+)
+```
+
+# Save filtered seurat object
+```{r}
+saveRDS(filtered_seurat, file = here("data", "seurat", "filtered_seurat.rds"))
+```
+
+# Plot QC metrics after filtering
+```{r warning=FALSE}
+metadata <- filtered_seurat@meta.data
+dim(metadata) # 184858 12
+
+# plot and save post-filter QC outputs
+pdf(file = here(
+  "results",
+  "intermediate_outputs",
+  "02_seurat",
+  "qc_plots_filtered.pdf"
+))
+
+plot_qc(metadata)
+
+dev.off()
+```
+
+# Determine cell cycle effects
+* Since the cell cycle genes included in Seurat only have human IDs, I have to convert them to mouse genes for this data.
+* To do so, I am using a recommendation described here:
+  * https://github.com/satijalab/seurat/issues/2493
+  * https://www.r-bloggers.com/2016/10/converting-mouse-to-human-gene-names-with-biomart-package/
+```{r warning=FALSE}
+pdf(file = here(
+  "results",
+  "intermediate_outputs",
+  "02_seurat",
+  "new_cellcycle_pca.pdf"
+))
+
+filtered_seurat <- cell_cycle_effects(filtered_seurat)
+
+dev.off()
+```
+
+# Normalization and integration
+* We are using harmony as it has been shown to remove technical variation while preserving biological variation.
+* We will have to provide the PCs from the elbow plot above (1:20)
+```{r warning=FALSE}
+filtered_seurat <- harmony_integration(filtered_seurat, dims = 1:20)
+# harmony converged after 10 iterations
+```
+
+# Save integrated seurat object
+```{r}
+saveRDS(filtered_seurat, file = here("data", "seurat", "new_integrated_seurat.rds"))
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 45 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "seurat_preprocessing",
+  "04_3xtgad_seurat_preprocessing.Rmd"
+))
+# lintr
+lint(filename = here(
+  "src",
+  "seurat_preprocessing",
+  "04_3xtgad_seurat_preprocessing.Rmd"
+))
+```
