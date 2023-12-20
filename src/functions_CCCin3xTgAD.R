@@ -233,85 +233,22 @@ plot_qc <- function(metadata) {
   plot(cor)
 }
 
-### REMOVE IF NEW CELL CYCLY FXN WORKS
-## convert_human_gene_list
-# Source: https://www.r-bloggers.com/2016/10/converting-mouse-to-human-gene-names-with-biomart-package/ 
-# I adapted the function to use an archived version of ensembl, as there were mirror issues due to update in Feb 2023
-# A function to convert human to mouse gene names 
-convert_human_gene_list <- function(x) {
-  require("biomaRt")
-  human <- useMart("ensembl",
-                  dataset = "hsapiens_gene_ensembl",
-                  host = "https://dec2021.archive.ensembl.org/")
-  mouse <- useMart("ensembl",
-                  dataset = "mmusculus_gene_ensembl",
-                  host = "https://dec2021.archive.ensembl.org/")
-  genesV2 <- getLDS(attributes = c("hgnc_symbol"),
-                   filters = "hgnc_symbol",
-                   values = x ,
-                   mart = human,
-                   attributesL = c("mgi_symbol"),
-                   martL = mouse,
-                   uniqueRows = T)
-  humanx <- unique(genesV2[, 2])
-  return(humanx)
-}
-
-### OLD
 ## cell_cycle_effects
 # A function which calculates and plots the effect of cell cycle on the data using a filtered seurat object as input. It also performs log normalization, scaling, and dimension reduction using PCA
-cell_cycle_effects_old <- function(filtered_seurat){
+cell_cycle_effects <- function(filtered_seurat, g2m_genes, s_genes){
   # log normalize -----
   filtered_seurat <- NormalizeData(filtered_seurat)
-  # convert human cell cylce markers to mouse -----
-  s.genes <- convert_human_gene_list(cc.genes.updated.2019$s.genes)
-  g2m.genes <- convert_human_gene_list(cc.genes.updated.2019$g2m.genes)
   # score cells based in gex of genes -----
   filtered_seurat <- CellCycleScoring(filtered_seurat,
-                                      g2m.features = g2m.genes,
-                                      s.features = s.genes)
+                                      g2m.features = g2m_genes,
+                                      s.features = s_genes)
   filtered_seurat <- FindVariableFeatures(filtered_seurat,
                                           selection.method = "vst",
                                           verbose = FALSE)
   # scale data -----
   filtered_seurat <- ScaleData(filtered_seurat)
   # run pca -----
-  filtered_seurat <- RunPCA(filtered_seurat, approx = FALSE)
-  # plot pca -----
-  elbow <- ElbowPlot(filtered_seurat, reduction = "pca", ndims = 50)
-  # plot cell cycle scoring -----
-  cell_cycle_plot <- DimPlot(filtered_seurat,
-                             reduction = "pca",
-                             group.by = "Phase",
-                             split.by = "Phase")
-  plot(cell_cycle_plot)
-  plot(elbow)
-  return(filtered_seurat)
-}
-
-### NEW
-## cell_cycle_effects
-# A function which calculates and plots the effect of cell cycle on the data using a filtered seurat object as input. It also performs log normalization, scaling, and dimension reduction using PCA
-cell_cycle_effects <- function(filtered_seurat){
-  # log normalize -----
-  filtered_seurat <- NormalizeData(filtered_seurat)
-  # convert human cell cylce markers to mouse -----
-  mmus_s <- gorth(cc.genes.updated.2019$s.genes,
-                  source_organism = "hsapiens",
-                  target_organism = "mmusculus")$ortholog_name
-  mmus_g2m <- gorth(cc.genes.updated.2019$g2m.genes,
-                    source_organism = "hsapiens",
-                    target_organism = "mmusculus")$ortholog_name
-  # score cells based in gex of genes -----
-  filtered_seurat <- CellCycleScoring(filtered_seurat,
-                                      g2m.features = mmus_g2m,
-                                      s.features = mmus_s)
-  filtered_seurat <- FindVariableFeatures(filtered_seurat,
-                                          selection.method = "vst",
-                                          verbose = FALSE)
-  # scale data -----
-  filtered_seurat <- ScaleData(filtered_seurat)
-  # run pca -----
+  set.seed(42)
   filtered_seurat <- RunPCA(filtered_seurat, approx = FALSE)
   # plot pca -----
   elbow <- ElbowPlot(filtered_seurat, reduction = "pca", ndims = 50)
@@ -333,6 +270,7 @@ harmony_integration <- function(seurat_object, dims){
                               reduction = "pca",
                               dims.use = dims, assay.use = "RNA")
   # Here we use all PCs computed from Harmony for UMAP calculation -----
+  set.seed(42)
   seurat_object <- RunUMAP(seurat_object, dims = dims, reduction = "harmony", reduction.name = "umap_harmony")
   return(seurat_object)
 }
