@@ -45,10 +45,7 @@ suppressPackageStartupMessages({
   library(clustree)
   library(stringr)
   library(scCustomize)
-  # remove 1 depending on cell cycle results after LW
-  library(biomaRt)
   library(gprofiler2)
-  # see above
   library(here)
   library(styler)
   library(lintr)
@@ -144,20 +141,46 @@ plot_qc(metadata)
 dev.off()
 ```
 
-# Determine cell cycle effects
-* Since the cell cycle genes included in Seurat only have human IDs, I have to convert them to mouse genes for this data.
+# Convert cell cycle gene sets
+* Since the cell cycle genes included in Seurat only have human IDs, we convert them to mouse genes for this data.
 * To do so, I am using a recommendation described here:
-  * https://github.com/satijalab/seurat/issues/2493
-  * https://www.r-bloggers.com/2016/10/converting-mouse-to-human-gene-names-with-biomart-package/
+  * https://github.com/satijalab/seurat/issues/2493 
+  * TLDR: Converting human gene IDs to mouse using the gprofiler2 R package
+* We performed the conversion on 231219, if you perform it at a later point, your results might vary slighty.
+  * If your goal is to reproduce our results exactly, we recommend using our conversion files
+    * These are loaded during the "Determine cell cycle effects" chunk below
+```{r eval=FALSE, include=FALSE}
+s_genes_mm <- gorth(cc.genes.updated.2019$s.genes,
+                    source_organism = "hsapiens",
+                    target_organism = "mmusculus")$ortholog_name
+
+g2m_genes_mm <- gorth(cc.genes.updated.2019$g2m.genes,
+                      source_organism = "hsapiens",
+                      target_organism = "mmusculus")$ortholog_name
+
+# saving both converted gene sets for later use
+saveRDS(s_genes_mm, file = here("doc", "s_genes_mm.rds"))
+saveRDS(g2m_genes_mm, file = here("doc", "g2m_genes_mm.rds"))
+```
+
+# Determine cell cycle effects
+* If you did not perform the cell cycle gene set conversion from human to mouse, load our converted gene sets.
 ```{r warning=FALSE}
+# Load converted cell cycle gene sets
+s_genes <- readRDS(here("doc", "s_genes_mm.rds"))
+g2m_genes <- readRDS(here("doc", "g2m_genes_mm.rds"))
+
+# Calculate and plot cell cycle effects
 pdf(file = here(
   "results",
   "intermediate_outputs",
   "02_seurat",
-  "new_cellcycle_pca.pdf"
+  "cellcycle_pca.pdf"
 ))
 
-filtered_seurat <- cell_cycle_effects(filtered_seurat)
+filtered_seurat <- cell_cycle_effects(filtered_seurat,
+                                      g2m_genes = g2m_genes,
+                                      s_genes = s_genes)
 
 dev.off()
 ```
