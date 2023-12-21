@@ -265,6 +265,7 @@ cell_cycle_effects <- function(filtered_seurat, g2m_genes, s_genes){
 ## harmony_integration
 # A function which integrates a seurat object using harmony
 harmony_integration <- function(seurat_object, dims){
+  set.seed(42)
   seurat_object <- RunHarmony(seurat_object,
                               group.by.vars = "sample",
                               reduction = "pca",

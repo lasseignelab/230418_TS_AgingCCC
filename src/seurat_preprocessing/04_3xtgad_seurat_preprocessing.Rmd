@@ -166,6 +166,7 @@ saveRDS(g2m_genes_mm, file = here("doc", "g2m_genes_mm.rds"))
 # Determine cell cycle effects
 * If you did not perform the cell cycle gene set conversion from human to mouse, load our converted gene sets.
 ```{r warning=FALSE}
+filtered_seurat <- readRDS("../../data/seurat/filtered_seurat1215.rds")
 # Load converted cell cycle gene sets
 s_genes <- readRDS(here("doc", "s_genes_mm.rds"))
 g2m_genes <- readRDS(here("doc", "g2m_genes_mm.rds"))
