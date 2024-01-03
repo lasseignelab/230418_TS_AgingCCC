@@ -1,0 +1,29 @@
+S02_12m_AD
+Ta2
+Martian Runtime - v4.0.6
+2023-11-17 17:12:01 [runtime] Reattaching in local mode.
+Serving UI at http://c0198:45596?auth=N-2MgayqhwK0baECY5sRb-QDUBq0PT4b-SVHGtWdVRM
+
+
+Outputs:
+- Run summary HTML:                         /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/web_summary.html
+- Run summary CSV:                          /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/metrics_summary.csv
+- BAM:                                      /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/possorted_genome_bam.bam
+- BAM index:                                /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/possorted_genome_bam.bam.bai
+- Filtered feature-barcode matrices MEX:    /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/filtered_feature_bc_matrix
+- Filtered feature-barcode matrices HDF5:   /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/filtered_feature_bc_matrix.h5
+- Unfiltered feature-barcode matrices MEX:  /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/raw_feature_bc_matrix
+- Unfiltered feature-barcode matrices HDF5: /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/raw_feature_bc_matrix.h5
+- Secondary analysis output CSV:            /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/analysis
+- Per-molecule read information:            /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/molecule_info.h5
+- CRISPR-specific analysis:                 null
+- CSP-specific analysis:                    null
+- Loupe Browser file:                       /data/user/lizzyr/code_review/230418_TS_AgingCCC/data/CellRangerCounts/pre_soupX/S02_12m_AD/outs/cloupe.cloupe
+- Feature Reference:                        null
+- Target Panel File:                        null
+- Probe Set File:                           null
+
+Waiting 6 seconds for UI to do final refresh.
+Pipestance completed successfully!
+
+2023-11-17 17:12:08 Shutting down.
