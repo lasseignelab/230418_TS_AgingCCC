@@ -1,0 +1,11 @@
+
+The following have been reloaded with a version change:
+  1) GCCcore/10.2.0 => GCCcore/5.4.0
+  2) binutils/2.35-GCCcore-10.2.0 => binutils/2.26-GCCcore-5.4.0
+
+error: The argument '--id <ID>' requires a value but none was supplied
+
+USAGE:
+    cellranger count [FLAGS] [OPTIONS] --id <ID> --transcriptome <PATH>
+
+For more information try --help

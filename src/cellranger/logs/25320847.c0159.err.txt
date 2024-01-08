@@ -1,0 +1,13 @@
+
+The following have been reloaded with a version change:
+  1) GCCcore/10.2.0 => GCCcore/5.4.0
+  2) binutils/2.35-GCCcore-10.2.0 => binutils/2.26-GCCcore-5.4.0
+
+error: Found argument '--output-dir' which wasn't expected, or isn't valid in this context
+
+If you tried to supply `--output-dir` as a PATTERN use `-- --output-dir`
+
+USAGE:
+    cellranger count --id <ID> --transcriptome <PATH> --include-introns --fastqs <PATH>... --sample <PREFIX>...
+
+For more information try --help

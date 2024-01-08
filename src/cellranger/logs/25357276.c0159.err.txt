@@ -1,0 +1,9 @@
+
+The following have been reloaded with a version change:
+  1) GCCcore/10.2.0 => GCCcore/5.4.0
+  2) binutils/2.35-GCCcore-10.2.0 => binutils/2.26-GCCcore-5.4.0
+
+mkdir: cannot create directory ‘/data/user/lizzyr/code_review/230418_TS_AgingCCC/results/cellranger/Ta1’: File exists
+error: Invalid value for '--transcriptome <PATH>': No such file or directory: '/data/project/lasseigne_lab/tsoelter/apps/refdata-gex-mm10-2020-A'
+
+For more information try --help
