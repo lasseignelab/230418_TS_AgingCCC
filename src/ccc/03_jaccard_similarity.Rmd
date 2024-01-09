@@ -1,0 +1,400 @@
+---
+title: "03_jaccard_similarity"
+author: "Tabea M. Soelter"
+date: "2024-01-09"
+output: html_document
+---
+**Jaccard Similarity Index (JI) for CCC genes across cell types and time points**
+
+__Goal__: Calculate similarity, using the Jaccard Similarity Index, of identified ligands, receptors, and target genes across cell types and time points. This allows us to identify cell-type-specific and cell-type-agnostic CCC mechanisms across time points.
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.1
+* HPC: Yes
+  * Resources: long partition (150hrs), 6 CPUs, 65GB per CPU
+
+__Data__:
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data 
+* Prepare input for Jaccard Index calculation
+  * Create dfs with 2 columns: gene, cell type
+    * gene refers to either the ligands, receptors, or target genes
+* Calculate Jaccard Index
+  * Do this for both Ex and In Neurons
+
+__Analysis__:
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+```
+
+# Set Filtering Criteria
+* These are the same as previously
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+```
+
+# Filter MultiNicheNet output
+* Filter by ligand actvity and regulatory potential (person and spearman correlation coefficients)
+```{r warning=FALSE}
+# filter for AD
+group_oi <- "X6mAD"
+lrt_cor_filtered_1 <- filter_nichenet(output) # 225
+
+group_oi <- "X12mAD"
+lrt_cor_filtered_2 <- filter_nichenet(output) # 1788
+
+# filter for WT
+group_oi <- "X6mWT"
+lrt_cor_filtered_3 <- filter_nichenet(output) # 110
+
+group_oi <- "X12mWT"
+lrt_cor_filtered_4 <- filter_nichenet(output) # 479
+
+# combine AD and WT, irrespective of time point
+lrt_cor_filtered <- rbind(
+  lrt_cor_filtered_1,
+  lrt_cor_filtered_2,
+  lrt_cor_filtered_3,
+  lrt_cor_filtered_4
+) # 2602
+
+# Rename receiver cell types
+lrt_cor_filtered$receiver <- ifelse(
+  lrt_cor_filtered$receiver == "Inhibitory.Neurons",
+  "Inhibitory Neurons",
+  "Excitatory Neurons"
+)
+
+# Check receivers were renamed and number
+table(lrt_cor_filtered$receiver) # Ex 607 In 1995
+```
+
+# Calculate JI (Between senders)
+```{r}
+# set receivers again, since I modified them
+receivers_oi <- c("Excitatory Neurons", "Inhibitory Neurons")
+
+# ligands
+jaccard_results_ligands <- calculate_jaccard(lrt_cor_filtered,
+  senders = sender_oi,
+  receivers = receivers_oi,
+  type = "ligands"
+)
+
+# receptors
+jaccard_results_receptors <- calculate_jaccard(lrt_cor_filtered,
+  senders = sender_oi,
+  receivers = receivers_oi,
+  type = "receptors"
+)
+
+# targets
+jaccard_results_targets <- calculate_jaccard(lrt_cor_filtered,
+  senders = sender_oi,
+  receivers = receivers_oi,
+  type = "targets"
+)
+```
+
+# Calculate JI (Between receivers)
+```{r warning=FALSE}
+jaccard_receptors_receiver <- calculate_jaccard2(lrt_cor_filtered,
+  senders = sender_oi,
+  receivers = receivers_oi,
+  type = "receptor"
+)
+
+jaccard_targets_receiver <- calculate_jaccard2(lrt_cor_filtered,
+  senders = sender_oi,
+  receivers = receivers_oi,
+  type = "target"
+)
+```
+
+# Arrange JI outputs for plotting
+```{r}
+# receptors
+jaccard_receptors <- data.frame(
+  cell_types = names(jaccard_receptors_receiver),
+  jaccard_index = unlist(jaccard_receptors_receiver),
+  stringsAsFactors = FALSE
+) %>%
+  separate(cell_types,
+    into = c(
+      "sender",
+      "celltype1",
+      "celltype2"
+    ),
+    sep = "_"
+  )
+
+rownames(jaccard_receptors) <- NULL
+
+# targets
+jaccard_targets <- data.frame(
+  cell_types = names(jaccard_targets_receiver),
+  jaccard_index = unlist(jaccard_targets_receiver),
+  stringsAsFactors = FALSE
+) %>%
+  separate(cell_types,
+    into = c(
+      "sender",
+      "celltype1",
+      "celltype2"
+    ),
+    sep = "_"
+  )
+
+rownames(jaccard_targets) <- NULL
+
+# combined
+jaccard_receptors$type <- "Receptors"
+jaccard_targets$type <- "Targets"
+
+jaccard_all <- rbind(jaccard_receptors, jaccard_targets)
+```
+
+# Plotting
+* Lollipop plots of JI between excitatory and inhibitory neurons for receptors and targets
+* Combined plot of the above
+```{r}
+png(here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "receptors_lollipop_neurons.png"
+))
+jaccard_receptors %>%
+  arrange(jaccard_index) %>%
+  mutate(sender = factor(sender, levels = sender)) %>%
+  ggplot(aes(x = sender, y = jaccard_index)) +
+  geom_segment(aes(xend = sender, yend = 0)) +
+  geom_point(size = 4, color = "#6a3d9a") +
+  coord_flip() +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    panel.grid.major = element_blank()
+  ) +
+  xlab("Sender Cells") +
+  ylab("JI") +
+  ylim(0, 0.5) +
+  ggtitle("Receptors")
+dev.off()
+
+png(here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "targets_lollipop_neurons.png"
+))
+jaccard_targets %>%
+  arrange(jaccard_index) %>%
+  mutate(sender = factor(sender, levels = sender)) %>%
+  ggplot(aes(x = sender, y = jaccard_index)) +
+  geom_segment(aes(xend = sender, yend = 0)) +
+  geom_point(size = 4, color = "#cab2d6") +
+  coord_flip() +
+  theme_bw() +
+  theme(
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
+    panel.grid.major = element_blank()
+  ) +
+  xlab("Sender Cells") +
+  ylab("JI") +
+  ylim(0, 0.5) +
+  ggtitle("Targets")
+dev.off()
+
+png(here("results", "final_outputs", "03_ccc", "combined_lollipop_neurons.png"))
+jaccard_all %>%
+  ggplot() +
+  geom_linerange(aes(x = sender, ymin = 0, ymax = jaccard_index, colour = type),
+    position = position_dodge(width = 0.2), size = 1
+  ) +
+  geom_point(aes(x = sender, y = jaccard_index, colour = type),
+    position = position_dodge(width = 0.2), size = 2
+  ) +
+  coord_flip() +
+  scale_color_manual(
+    values = c("Receptors" = "darkgreen", "Targets" = "darkseagreen"),
+    name = "Type"
+  ) +
+  theme_bw() +
+  labs(x = "Sender", y = "JI") +
+  ylim(0, 0.5) +
+  theme(
+    axis.title.x = element_text(size = 12, face = "bold"),
+    axis.title.y = element_text(size = 12, face = "bold"),
+    axis.text = element_text(size = 10, face = "bold"),
+    plot.title = element_text(size = 13, face = "bold", hjust = 0.5),
+    legend.text = element_text(face = "bold"),
+    legend.title = element_text(face = "bold")
+  ) +
+  ggtitle("JI between Excitatory and Inhibitory Neurons")
+dev.off()
+```
+
+# Saving outputs
+```{r}
+saveRDS(
+  jaccard_results_ligands,
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "jaccard_ligands_senders.rds"
+  )
+)
+
+saveRDS(
+  jaccard_results_receptors,
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "jaccard_receptors_senders.rds"
+  )
+)
+
+saveRDS(
+  jaccard_results_targets,
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "jaccard_targets_senders.rds"
+  )
+)
+
+saveRDS(
+  jaccard_receptors,
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "jaccard_receptors_receivers.rds"
+  )
+)
+
+saveRDS(
+  jaccard_targets,
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "jaccard_targets_receivers.rds"
+  )
+)
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2     styler_1.9.1    here_1.0.1      lubridate_1.9.2 forcats_1.0.0  
+ [6] stringr_1.5.0   dplyr_1.1.1     purrr_1.0.1     readr_2.1.4     tidyr_1.3.0    
+[11] tibble_3.2.1    ggplot2_3.4.2   tidyverse_2.0.0
+
+loaded via a namespace (and not attached):
+ [1] tidyselect_1.2.0  xfun_0.38         remotes_2.4.2     colorspace_2.1-0 
+ [5] vctrs_0.6.2       generics_0.1.3    htmltools_0.5.5   yaml_2.3.7       
+ [9] utf8_1.2.3        rlang_1.1.0       R.oo_1.25.0       pillar_1.9.0     
+[13] glue_1.6.2        withr_2.5.0       R.utils_2.12.2    lifecycle_1.0.3  
+[17] R.cache_0.16.0    munsell_0.5.0     gtable_0.3.3      R.methodsS3_1.8.2
+[21] evaluate_0.20     labeling_0.4.2    knitr_1.42        tzdb_0.3.0       
+[25] callr_3.7.3       fastmap_1.1.1     ps_1.7.5          rex_1.2.1        
+[29] fansi_1.0.4       scales_1.2.1      desc_1.4.2        farver_2.1.1     
+[33] hms_1.1.3         digest_0.6.31     stringi_1.7.12    processx_3.8.1   
+[37] grid_4.2.3        rprojroot_2.0.3   cli_3.6.1         tools_4.2.3      
+[41] magrittr_2.0.3    lazyeval_0.2.2    crayon_1.5.2      pkgconfig_2.0.3  
+[45] xml2_1.3.3        cyclocomp_1.1.0   timechange_0.2.0  rmarkdown_2.21   
+[49] rstudioapi_0.14   R6_2.5.1          compiler_4.2.3
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: < 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "ccc",
+  "03_jaccard_similarity.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "ccc",
+  "03_jaccard_similarity.Rmd"
+))
+```

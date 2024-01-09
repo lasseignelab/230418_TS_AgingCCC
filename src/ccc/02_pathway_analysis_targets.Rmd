@@ -1,0 +1,377 @@
+---
+title: "02_pathway_analysis_targets"
+author: "Tabea M. Soelter"
+date: "2024-01-08"
+output: html_document
+---
+**Pathway Analysis of predicted target genes using gprofiler2**
+
+__Goal__: Perform pathway analyses for genes that were predicted as potential downstream targets in inhibitory and excitatory neurons of CCC interactions altered in AD. 
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.1
+* HPC: Yes
+  * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*Seurat object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * MultiNicheNet object
+* Filter object to get target genes
+* Pathway Analysis using gprofiler2
+  * Plotting of pathways
+* Save output
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(gprofiler2)
+  library(tidyverse)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+```
+
+# Grab targets and perform pathway analysis
+```{r}
+## pathway_analysis
+# A wrapper function to prepare inputs for pathway analysis, perform pathway analysis using gprofiler2 on up/down regulated target genes from nichenet
+pathway_analysis <- function(multinichenet_output, receiver_type) {
+  # subset output for df with target expression info -----
+  target_expression <- multinichenet_output$exprs_tbl_target
+  # filter expression df for necessary columns and cell type as well as add up/down gex info -----
+  neuro_targets_direction <- target_expression %>%
+    dplyr::select(receiver, target, target_expression_scaled) %>%
+    filter(receiver == receiver_type) %>%
+    mutate(direction = ifelse(target_expression_scaled > 0, "up", "down")) %>%
+    unique()
+  # pathway analysis of up/down genes
+  fea_res <- combined_fea(neuro_targets_direction, receiver = receiver)
+  return(fea_res)
+}
+
+# pathway analysis
+fea_ex <- pathway_analysis(output, receiver_type = "Excitatory.Neurons")
+```
+
+# Filter nichenet object
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# group of interest (for now)
+group_oi <- "X6mWT"
+
+# filter MultiNicheNet output
+prior <- filter_nichenet(output)
+
+prior_filt <- prior %>%
+  select(receiver, target, direction_regulation, group)
+
+fea_res <- combined_fea(prior_filt, receiver = "Excitatory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 6mWT Ex Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+
+fea_res <- combined_fea(prior_filt, receiver = "Inhibitory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 6mWT In Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+```
+
+# 12m WT
+```{r}
+# group of interest (for now)
+group_oi <- "X12mWT"
+
+# filter MultiNicheNet output
+prior <- filter_nichenet(output)
+
+prior_filt <- prior %>%
+  select(receiver, target, direction_regulation, group)
+
+fea_res <- combined_fea(prior_filt, receiver = "Excitatory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 12mWT Ex Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+
+fea_res <- combined_fea(prior_filt, receiver = "Inhibitory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 12mWT In Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+```
+
+# 6m AD
+```{r}
+# group of interest (for now)
+group_oi <- "X6mAD"
+
+# filter MultiNicheNet output
+prior <- filter_nichenet(output)
+
+prior_filt <- prior %>%
+  select(receiver, target, direction_regulation, group)
+
+fea_res <- combined_fea(prior_filt, receiver = "Excitatory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 6mAD Ex Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+
+fea_res <- combined_fea(prior_filt, receiver = "Inhibitory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 6mAD In Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+```
+
+# 12m AD
+```{r}
+# group of interest (for now)
+group_oi <- "X12mAD"
+
+# filter MultiNicheNet output
+prior <- filter_nichenet(output)
+
+prior_filt <- prior %>%
+  select(receiver, target, direction_regulation, group)
+
+fea_res <- combined_fea(prior_filt, receiver = "Excitatory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 12mAD Ex Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+
+fea_res <- combined_fea(prior_filt, receiver = "Inhibitory.Neurons")
+
+ggplot(fea_res$combined,
+                 aes(x = direction_regulation,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in 12mAD In Neurons") +
+    theme(axis.text = element_text(face = "bold"))
+```
+
+# FEA for genes shared
+```{r}
+### 6 MONTHS
+# pull all interactions up-regulated in WT (inferred as down/lost in AD)
+group_oi <- "X6mWT"
+
+prior <- filter_nichenet(output)
+
+prior_filt_ctrl <- prior %>%
+  select("id_target", "sender", "target") %>%
+  mutate(condition = "6mWT")
+
+# pull all interactions up-regulated in AD
+group_oi <- "X6mAD"
+
+prior <- filter_nichenet(output)
+
+prior_filt_ad <- prior %>%
+  select("id_target", "sender", "target") %>%
+  mutate(condition = "6mAD")
+
+# combine into 1 dataframe
+combined <- rbind(prior_filt_ad, prior_filt_ctrl)
+
+### 12 months
+# pull all interactions up-regulated in WT (inferred as down/lost in AD)
+group_oi <- "X12mWT"
+
+prior <- filter_nichenet(output)
+
+prior_filt_ctrl <- prior %>%
+  select("id_target", "sender", "target") %>%
+  mutate(condition = "12mWT")
+
+# pull all interactions up-regulated in AD
+group_oi <- "X12mAD"
+
+prior <- filter_nichenet(output)
+
+prior_filt_ad <- prior %>%
+  select("id_target", "sender", "target") %>%
+  mutate(condition = "12mAD")
+
+# combine into 1 dataframe
+combined2 <- rbind(prior_filt_ad, prior_filt_ctrl)
+
+# COMBINED
+all <- rbind(combined, combined2)
+
+shared <- all %>%
+  group_by(id_target) %>%
+  filter(n() > 1)
+
+shared$condition <- substring(shared$condition, nchar(shared$condition) - 1, nchar(shared$condition))
+
+shared <- unique(shared)
+
+shared_filt <- shared %>%
+  ungroup() %>%
+  select(target, condition) %>%
+  unique()
+
+# sums <- shared %>%
+#   group_by(condition) %>%
+#   summarize(interactions = n_distinct(id_target))
+
+### AD
+shared_ad <- shared_filt %>%
+  filter(condition == "AD") %>%
+  select(target) %>%
+  as.list()
+
+fea_res_ad <- fea(shared_ad$target)
+
+
+### WT
+shared_wt <- shared_filt %>%
+  filter(condition == "WT") %>%
+  select(target) %>%
+  as.list()
+
+fea_res_wt <- fea(shared_wt$target)
+```
+
+# plotting shared pathways
+```{r}
+ggplot(fea_res_ad,
+                 aes(x = query,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in AD Shared Across Timepoints") +
+    theme(axis.text = element_text(face = "bold"))
+
+
+ggplot(fea_res_wt,
+                 aes(x = query,
+                     y = reorder(term_name, -p_value),
+                     size = intersection_size,
+                     fill = p_value)) +
+    geom_point(alpha = 0.7, shape = 21) +
+    scale_size(range = c(2, 10), name = "Intersection Size") + 
+    scale_fill_distiller(palette = "Purples") + 
+    labs(x = "Direction", y = "Functional Enrichment Terms") +
+    theme_minimal() + 
+    ggtitle("Top Enriched Terms for Predicted Target\nGenes in WT Shared Across Timepoints") +
+    theme(axis.text = element_text(face = "bold"))
+
+test <- rbind(fea_res_ad, )
+```
+
+
+
