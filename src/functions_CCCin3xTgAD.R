@@ -616,3 +616,115 @@ filter_nichenet <- function(object) {
     perl = TRUE)
   return(lr_target_prior_cor_filtered)
 }
+
+## jaccard
+# A function calculating jaccard similarity index values
+# Not written by me, this formula can be found in multiple places and forums
+jaccard <- function(a, b) {
+  intersection = length(intersect(a, b))
+  union = length(a) + length(b) - intersection
+  return (intersection/union)
+}
+
+## calculate_jaccard
+# a wrapper for code written by Vishal H. Oza. I modified his code for my own usage.
+calculate_jaccard <- function(df, senders, receivers, type) {
+  if(type == "ligands") {
+    # empty list
+    jaccard_results <- list()
+    # calculate JI for ligands across all senders by receivers
+    for (i in receivers) {
+      filtered_receiver <- df %>% filter(receiver == i) %>% select(c("sender", "ligand"))
+      
+      for (cell_type in senders) {
+        genes <- unique(filtered_receiver$ligand[filtered_receiver$sender == cell_type]) 
+        
+        for (other_cell_type in senders[senders != cell_type]) {
+          other_genes <- unique(filtered_receiver$ligand[filtered_receiver$sender == other_cell_type])
+          
+          jaccard_index <- jaccard(genes, other_genes) 
+          
+          result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+          jaccard_results[[result_key]] <- jaccard_index
+        }
+      }
+    }
+  } else if(type == "receptors") {
+    # empty list
+    jaccard_results <- list()
+    # calculate JI for receptors across all senders by receivers
+    for (i in receivers) {
+      filtered_receiver <- df %>% filter(receiver == i) %>% select(c("sender", "receptor"))
+      
+      for (cell_type in senders) {
+        genes <- unique(filtered_receiver$receptor[filtered_receiver$sender == cell_type]) 
+        
+        for (other_cell_type in senders[senders != cell_type]) {
+          other_genes <- unique(filtered_receiver$receptor[filtered_receiver$sender == other_cell_type])
+          
+          jaccard_index <- jaccard(genes, other_genes) 
+          
+          result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+          jaccard_results[[result_key]] <- jaccard_index
+        }
+      }
+    }
+  } else if(type == "targets") {
+    # empty list
+    jaccard_results <- list()
+    # # calculate JI for targets across all senders by receivers
+    for (i in receivers) {
+      filtered_receiver <- df %>% filter(receiver == i) %>% select(c("sender", "target"))
+      
+      for (cell_type in senders) {
+        genes <- unique(filtered_receiver$target[filtered_receiver$sender == cell_type]) 
+        
+        for (other_cell_type in senders[senders != cell_type]) {
+          other_genes <- unique(filtered_receiver$target[filtered_receiver$sender == other_cell_type])
+          
+          jaccard_index <- jaccard(genes, other_genes) 
+          
+          result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+          jaccard_results[[result_key]] <- jaccard_index
+        }
+      }
+    }
+  } else {
+    print("Please set either ligands, receptors, or targets equal to TRUE")
+  } 
+  return(jaccard_results)
+}
+
+## calculate_jaccard2
+# Modified wrapper of calculate_jaccard wrapper. Original code adapted from Vishal H. Oza
+calculate_jaccard2 <- function(df, senders, receivers, type) {
+  jaccard_results <- list()
+  
+  for (i in senders) {
+    filtered_receiver <- df %>% filter(sender == i) %>% select(c("receiver", type))
+    
+    if(type == "receptor") {
+      for (cell_type in receivers) {
+        genes <- unique(filtered_receiver$receptor[filtered_receiver$receiver == cell_type]) 
+        
+        for (other_cell_type in receivers[receivers != cell_type]) {
+          other_genes <- unique(filtered_receiver$receptor[filtered_receiver$receiver == other_cell_type])
+        }
+      }
+    } else if(type == "target") {
+      for (cell_type in receivers) {
+        genes <- unique(filtered_receiver$target[filtered_receiver$receiver == cell_type]) 
+        
+        for (other_cell_type in receivers[receivers != cell_type]) {
+          other_genes <- unique(filtered_receiver$target[filtered_receiver$receiver == other_cell_type])
+        }
+      }
+    }
+    jaccard_index <- jaccard(genes, other_genes) 
+    result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+    jaccard_results[[result_key]] <- jaccard_index
+  }
+  
+  
+  return(jaccard_results)
+}
