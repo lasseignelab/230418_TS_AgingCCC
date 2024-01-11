@@ -39,4 +39,4 @@ singularity exec \
 --containall \
 -B ${wd} \
 ${wd}/bin/docker/rstudio_aging_ccc_1.0.0.sif \
-Rscript --vanilla ${wd}/src/02_3xtgad_clustering.R ${INPUT} ${INPUT2} ${INPUT3}
+Rscript --vanilla ${wd}/src/seurat_preprocessing/02_3xtgad_clustering.R ${INPUT} ${INPUT2} ${INPUT3}
