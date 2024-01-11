@@ -590,7 +590,7 @@ filter_nichenet <- function(object) {
     inner_join(object$ligand_activities_targets_DEgenes$ligand_activities %>%
                  distinct(ligand, target, direction_regulation, contrast)) %>%
     inner_join(contrast_tbl) %>%
-    filter(group == group_oi, receiver %in% receiver_oi, sender %in% sender_oi)
+    filter(group %in% group_oi, receiver %in% receiver_oi, sender %in% sender_oi)
   
   lr_target_prior_cor_filtered_up <- lr_target_prior_cor_filtered %>%
     filter(direction_regulation == "up") %>%
