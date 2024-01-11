@@ -52,7 +52,7 @@ source(here("src", "functions_CCCin3xTgAD.R"))
 
 # Clustering
 __NOTE: ONLY RUN THIS CHUNK IF YOU DID NOT RUN OPTIONAL 02_3xtgad_clustering.R/sh SCRIPTS__
-__* Skip to line 75 if you did run the above scripts__
+__* Skip to line 77 if you did run the above scripts__
   * 02 scripts were needed to determine most stable resolution (0.7)
 ```{r eval=FALSE, warning=FALSE, include=FALSE}
 # load integrated seurat object
@@ -69,7 +69,9 @@ filtered_seurat <- find_clusters(filtered_seurat,
 )
 
 # save clustered object
-saveRDS(filtered_seurat, file = here("data", "seurat", "clustered_seurat.rds"))
+ifelse(file.exists(here("data", "seurat", "clustered_seurat.rds")),
+       "Clustered seurat object already exists",
+       saveRDS(filtered_seurat, file = here("data", "seurat", "clustered_seurat.rds")))
 ```
 
 # Load clustered seurat object
