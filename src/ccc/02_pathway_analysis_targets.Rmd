@@ -136,18 +136,29 @@ fea_res_WT_shared <- fea_res_wt %>%
 
 fea_res_shared <- rbind(fea_res_AD_shared, fea_res_WT_shared)
 
-ggplot(fea_res_shared,
-       aes(x = condition,
-           y = reorder(term_name, -p_value),
-           size = recall,
-           fill = p_value)) +
+bubbleplot_shared <- ggplot(fea_res_shared,
+                            aes(x = condition,
+                                y = reorder(term_name, -p_value),
+                                size = recall,
+                                fill = p_value)) +
   geom_point(alpha = 0.7, shape = 21) +
   scale_size(range = c(2, 10), name = "Recall") + 
   scale_fill_distiller(palette = "Greens") + 
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
-  theme_minimal() + 
+  labs(x = "Condition", y = "Functional Enrichment Terms") + 
   ggtitle("Top Enriched Terms for Predicted Target\nGenes Shared Across Timepoints") +
-  theme(axis.text = element_text(face = "bold"))
+  theme_minimal() +
+  theme(axis.text = element_text(face = "bold"),
+        text = element_text(face = "bold")) 
+
+png(here("results", "intermediate_outputs", "04_ccc", "fea_shared_bubbleplot.png"), dpi)
+ggsave(here("results", "intermediate_outputs", "04_ccc", "fea_shared_bubbleplot.png"),
+       bubbleplot_shared,
+       dpi = 400,
+       width = 8,
+       height = 7,
+       bg= "#ffffff")
+bubbleplot_shared
+dev.off()
 ```
 
 # Filter all the interactions by those that are shared 
