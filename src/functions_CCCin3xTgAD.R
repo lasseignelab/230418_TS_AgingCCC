@@ -617,6 +617,33 @@ filter_nichenet <- function(object) {
   return(lr_target_prior_cor_filtered)
 }
 
+## fea
+# A function to perform pathway analysis using gprofiler2 and filters for the top 15 pathways for plotting purposes.
+# Original code from Elizabeth J. Wilk, adapted by TMS
+fea <- function(genes){
+  set.seed(42)
+  # create gprofiler2 query ----------
+  fea_result <- gost(query = genes,
+                     organism = "mmusculus",
+                     ordered_query = FALSE,
+                     multi_query = FALSE,
+                     significant = TRUE,
+                     exclude_iea = FALSE,
+                     measure_underrepresentation = FALSE,
+                     evcodes = TRUE,
+                     user_threshold = 0.05,
+                     correction_method = "bonferroni",
+                     domain_scope = "annotated",
+                     numeric_ns = "",
+                     sources = NULL,
+                     as_short_link = FALSE) 
+  # remove arbitrary pathways ----------
+  fea_result <- fea_result$result %>% filter(term_size < 1000 | term_size > 10)
+  # keep only top 15 pathways for plotting purposes ---------
+  fea_result_filt <- fea_result %>% top_n(n = 15)
+  return(fea_result_filt)
+}
+
 ## jaccard
 # A function calculating jaccard similarity index values
 # Not written by me, this formula can be found in multiple places and forums
