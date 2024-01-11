@@ -27,7 +27,8 @@ __Analysis Plan__:
 * Filter object to get target genes
 * Pathway Analysis using gprofiler2
   * Plotting of pathways
-* Save output
+  * Saving plots
+* Save FEA outputs
 
 # Load packages
 ```{r}
@@ -55,7 +56,7 @@ output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
 ```
 
 # Set filtering criteria
-* These are continously the same throughout the project
+* These are continuously the same throughout the project
 ```{r}
 # number of targets
 top_n_target <- 250
@@ -85,6 +86,7 @@ prior_filt <- prior %>%
 
 # FEA: Shared genes
 * Shared = genes shared between the 6- and 12-month time points within the same condition
+* The fea function is a wrapper for code adapted from Elizabeth J. Wilk
 ```{r}
 # Filter duplicate interactions
 shared <- prior_filt %>%
@@ -92,9 +94,11 @@ shared <- prior_filt %>%
   filter(n() > 1)
 
 # New column based on group column (i.e. Both 6mAD & 12mAD = AD, same for WT)
-shared$condition <- substring(shared$group,
-                              nchar(shared$group) - 1,
-                              nchar(shared$group))
+shared$condition <- substring(
+  shared$group,
+  nchar(shared$group) - 1,
+  nchar(shared$group)
+)
 
 # Remove old column to get unique interactions
 shared <- shared %>%
@@ -123,114 +127,204 @@ shared_wt <- shared_filt %>%
   as.list()
 
 fea_res_wt <- fea(shared_wt$target)
+
+# Adding condition information before combining FEA outputs for plotting
+fea_res_ad_shared <- fea_res_ad %>%
+  mutate(condition = "AD")
+
+fea_res_wt_shared <- fea_res_wt %>%
+  mutate(condition = "WT")
+
+fea_res_shared <- rbind(fea_res_ad_shared, fea_res_wt_shared)
 ```
 
 # Plotting shared pathways
 ```{r}
-# Adding condition information before combining FEA outputs
-fea_res_AD_shared <- fea_res_ad %>%
-  mutate(condition = "AD")
-
-fea_res_WT_shared <- fea_res_wt %>%
-  mutate(condition = "WT")
-
-fea_res_shared <- rbind(fea_res_AD_shared, fea_res_WT_shared)
-
-bubbleplot_shared <- ggplot(fea_res_shared,
-                            aes(x = condition,
-                                y = reorder(term_name, -p_value),
-                                size = recall,
-                                fill = p_value)) +
+bubbleplot_shared <- ggplot(
+  fea_res_shared,
+  aes(
+    x = condition,
+    y = reorder(term_name, -p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
   geom_point(alpha = 0.7, shape = 21) +
-  scale_size(range = c(2, 10), name = "Recall") + 
-  scale_fill_distiller(palette = "Greens") + 
-  labs(x = "Condition", y = "Functional Enrichment Terms") + 
-  ggtitle("Top Enriched Terms for Predicted Target\nGenes Shared Across Timepoints") +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(palette = "Greens") +
+  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  ggtitle("Top Enriched Terms for Target\nGenes Shared Across Timepoints") +
   theme_minimal() +
-  theme(axis.text = element_text(face = "bold"),
-        text = element_text(face = "bold")) 
+  theme(
+    axis.text = element_text(face = "bold"),
+    text = element_text(face = "bold")
+  )
 
-png(here("results", "intermediate_outputs", "04_ccc", "fea_shared_bubbleplot.png"), dpi)
-ggsave(here("results", "intermediate_outputs", "04_ccc", "fea_shared_bubbleplot.png"),
-       bubbleplot_shared,
-       dpi = 400,
-       width = 8,
-       height = 7,
-       bg= "#ffffff")
 bubbleplot_shared
-dev.off()
+
+ggsave(
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "fea_shared_bubbleplot.png"
+  ),
+  bubbleplot_shared,
+  dpi = 400,
+  width = 8,
+  height = 7,
+  bg = "#ffffff"
+)
 ```
 
-# Filter all the interactions by those that are shared 
+# Filter for unique genes 
 * shared_filt includes all targets that are somehow shared 
   * This includes interactions shared between 6m and 12m
-  * I am filtering condition and time point pairings to exclude any of those above targets (even if the LR pair is different than in the shared interactions, bc the target is still shared) 
+  * I am filtering condition and time point pairings to exclude any of those above targets (even if the LR pair is different than in the shared interactions, bc the target is still shared, implying the same downstream effect) 
 ```{r}
-targets_6m_AD <- all %>%
-  filter(condition == "6mAD") %>%
+targets_6m_ad <- prior_filt %>%
+  filter(group == "X6mAD") %>%
   filter(!target %in% shared_filt$target) # 75
 
-targets_6m_WT <- all %>%
-  filter(condition == "6mWT") %>%
+targets_6m_wt <- prior_filt %>%
+  filter(group == "X6mWT") %>%
   filter(!target %in% shared_filt$target) # 66
 
-targets_12m_AD <- all %>%
-  filter(condition == "12mAD") %>%
+targets_12m_ad <- prior_filt %>%
+  filter(group == "X12mAD") %>%
   filter(!target %in% shared_filt$target) # 1624
 
-targets_12m_WT <- all %>%
-  filter(condition == "12mWT") %>%
+targets_12m_wt <- prior_filt %>%
+  filter(group == "X12mWT") %>%
   filter(!target %in% shared_filt$target) # 429
 ```
 
-# FEA: Unique genes (specific to condition & timepoint)
+# FEA: Unique genes - 6-month
 ```{r}
-fea_res_6m_AD_unique <- fea(targets_6m_AD$target) %>%
-  mutate(group = "AD")
+# FEA on 6m unique genes by condition, then combine for plotting
+fea_res_6m_ad_unique <- fea(targets_6m_ad$target) %>%
+  mutate(condition = "AD")
 
-fea_res_6m_WT_unique <- fea(targets_6m_WT$target) %>%
-  mutate(group = "WT")
+fea_res_6m_wt_unique <- fea(targets_6m_wt$target) %>%
+  mutate(condition = "WT")
 
-fea_res_6m <- rbind(fea_res_6m_AD_unique, fea_res_6m_WT_unique)
-
-ggplot(fea_res_6m,
-       aes(x = group,
-           y = reorder(term_name, -p_value),
-           size = recall,
-           fill = p_value)) +
-  geom_point(alpha = 0.7, shape = 21) +
-  scale_size(range = c(2, 10), name = "Recall") + 
-  scale_fill_distiller(palette = "Greens") + 
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
-  theme_minimal() + 
-  ggtitle("Top Enriched Terms for Predicted Target\nGenes at 6-month time point") +
-  theme(axis.text = element_text(face = "bold"))
-
-fea_res_12m_AD_unique <- fea(targets_12m_AD$target) %>%
-  mutate(group = "AD")
-
-fea_res_12m_WT_unique <- fea(targets_12m_WT$target) %>%
-  mutate(group = "WT")
-
-fea_res_12m <- rbind(fea_res_12m_AD_unique, fea_res_12m_WT_unique)
-
-ggplot(fea_res_12m,
-       aes(x = group,
-           y = reorder(term_name, -p_value),
-           size = recall,
-           fill = p_value)) +
-  geom_point(alpha = 0.7, shape = 21) +
-  scale_size(range = c(2, 10), name = "Recall") + 
-  scale_fill_distiller(palette = "Greens") + 
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
-  theme_minimal() + 
-  ggtitle("Top Enriched Terms for Predicted Target\nGenes at 12-month time point") +
-  theme(axis.text = element_text(face = "bold"))
+fea_res_6m <- rbind(fea_res_6m_ad_unique, fea_res_6m_wt_unique)
 ```
 
-# Save FEA outputs
+# Plotting 6-month pathways
 ```{r}
-saveRDS()
+bubbleplot_6m_unique <- ggplot(
+  fea_res_6m,
+  aes(
+    x = condition,
+    y = reorder(term_name, -p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(palette = "Greens") +
+  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  theme_minimal() +
+  ggtitle("Top Enriched Terms for Target\nGenes at 6-month time point") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(face = "bold"),
+    text = element_text(face = "bold")
+  )
+
+bubbleplot_6m_unique
+
+ggsave(
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "fea_6m_bubbleplot.png"
+  ),
+  bubbleplot_6m_unique,
+  dpi = 400,
+  width = 8,
+  height = 7,
+  bg = "#ffffff"
+)
+```
+
+# FEA: Unique genes - 12-month
+```{r}
+# FEA on 12m unique genes by condition, then combine for plotting
+fea_res_12m_ad_unique <- fea(targets_12m_ad$target) %>%
+  mutate(condition = "AD")
+
+fea_res_12m_wt_unique <- fea(targets_12m_wt$target) %>%
+  mutate(condition = "WT")
+
+fea_res_12m <- rbind(fea_res_12m_ad_unique, fea_res_12m_wt_unique)
+```
+
+# Plotting 12-month pathways
+```{r}
+bubbleplot_12m_unique <- ggplot(
+  fea_res_12m,
+  aes(
+    x = condition,
+    y = reorder(term_name, -p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(palette = "Greens") +
+  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  theme_minimal() +
+  ggtitle("Top Enriched Terms for Target\nGenes at 12-month time point") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(face = "bold"),
+    text = element_text(face = "bold")
+  )
+
+bubbleplot_12m_unique
+
+ggsave(
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "fea_12m_bubbleplot.png"
+  ),
+  bubbleplot_12m_unique,
+  dpi = 400,
+  width = 8,
+  height = 7,
+  bg = "#ffffff"
+)
+```
+
+# Save filtered FEA outputs
+```{r}
+saveRDS(fea_res_shared, file = here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_shared.rds"
+))
+
+saveRDS(fea_res_6m, file = here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_6m.rds"
+))
+
+saveRDS(fea_res_12m, file = here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_12m.rds"
+))
 ```
 
 # Session info
@@ -255,43 +349,28 @@ attached base packages:
 [1] stats     graphics  grDevices utils     datasets  methods   base     
 
 other attached packages:
- [1] lintr_3.0.2      styler_1.9.1     here_1.0.1       lubridate_1.9.2  forcats_1.0.0   
- [6] stringr_1.5.0    dplyr_1.1.1      purrr_1.0.1      readr_2.1.4      tidyr_1.3.0     
-[11] tibble_3.2.1     ggplot2_3.4.2    tidyverse_2.0.0  gprofiler2_0.2.1
+ [1] lintr_3.0.2      styler_1.9.1     here_1.0.1       lubridate_1.9.2 
+ [5] forcats_1.0.0    stringr_1.5.0    dplyr_1.1.1      purrr_1.0.1     
+ [9] readr_2.1.4      tidyr_1.3.0      tibble_3.2.1     ggplot2_3.4.2   
+[13] tidyverse_2.0.0  gprofiler2_0.2.1
 
 loaded via a namespace (and not attached):
- [1] bitops_1.0-7                matrixStats_0.63.0          RColorBrewer_1.1-3         
- [4] httr_1.4.5                  rprojroot_2.0.3             GenomeInfoDb_1.34.9        
- [7] R.cache_0.16.0              tools_4.2.3                 utf8_1.2.3                 
-[10] R6_2.5.1                    HDF5Array_1.26.0            lazyeval_0.2.2             
-[13] BiocGenerics_0.44.0         colorspace_2.1-0            rhdf5filters_1.10.1        
-[16] withr_2.5.0                 tidyselect_1.2.0            processx_3.8.1             
-[19] compiler_4.2.3              cli_3.6.1                   Biobase_2.58.0             
-[22] xml2_1.3.3                  desc_1.4.2                  DelayedArray_0.24.0        
-[25] plotly_4.10.1               labeling_0.4.2              scales_1.2.1               
-[28] callr_3.7.3                 digest_0.6.31               rmarkdown_2.21             
-[31] R.utils_2.12.2              XVector_0.38.0              pkgconfig_2.0.3            
-[34] htmltools_0.5.5             sparseMatrixStats_1.10.0    MatrixGenerics_1.10.0      
-[37] limma_3.54.2                fastmap_1.1.1               htmlwidgets_1.6.2          
-[40] rlang_1.1.0                 rstudioapi_0.14             DelayedMatrixStats_1.20.0  
-[43] farver_2.1.1                generics_0.1.3              jsonlite_1.8.4             
-[46] BiocParallel_1.32.6         R.oo_1.25.0                 RCurl_1.98-1.12            
-[49] magrittr_2.0.3              scuttle_1.8.4               GenomeInfoDbData_1.2.9     
-[52] Matrix_1.5-4                Rhdf5lib_1.20.0             Rcpp_1.0.10                
-[55] munsell_0.5.0               S4Vectors_0.36.2            fansi_1.0.4                
-[58] lifecycle_1.0.3             R.methodsS3_1.8.2           edgeR_3.40.2               
-[61] stringi_1.7.12              yaml_2.3.7                  SummarizedExperiment_1.28.0
-[64] zlibbioc_1.44.0             plyr_1.8.8                  rhdf5_2.42.1               
-[67] grid_4.2.3                  dqrng_0.3.0                 parallel_4.2.3             
-[70] crayon_1.5.2                lattice_0.21-8              beachmat_2.14.2            
-[73] hms_1.1.3                   locfit_1.5-9.7              knitr_1.42                 
-[76] ps_1.7.5                    pillar_1.9.0                GenomicRanges_1.50.2       
-[79] codetools_0.2-19            stats4_4.2.3                glue_1.6.2                 
-[82] evaluate_0.20               rex_1.2.1                   data.table_1.14.8          
-[85] remotes_2.4.2               vctrs_0.6.2                 tzdb_0.3.0                 
-[88] gtable_0.3.3                xfun_0.38                   DropletUtils_1.18.1        
-[91] cyclocomp_1.1.0             viridisLite_0.4.1           SingleCellExperiment_1.20.1
-[94] IRanges_2.32.0              timechange_0.2.0
+ [1] ps_1.7.5           rprojroot_2.0.3    digest_0.6.31      utf8_1.2.3        
+ [5] R6_2.5.1           evaluate_0.20      httr_1.4.5         pillar_1.9.0      
+ [9] rlang_1.1.0        lazyeval_0.2.2     rstudioapi_0.14    data.table_1.14.8 
+[13] callr_3.7.3        R.utils_2.12.2     R.oo_1.25.0        rmarkdown_2.21    
+[17] textshaping_0.3.6  labeling_0.4.2     desc_1.4.2         htmlwidgets_1.6.2 
+[21] RCurl_1.98-1.12    munsell_0.5.0      compiler_4.2.3     xfun_0.38         
+[25] systemfonts_1.0.4  pkgconfig_2.0.3    htmltools_0.5.5    tidyselect_1.2.0  
+[29] fansi_1.0.4        viridisLite_0.4.1  crayon_1.5.2       tzdb_0.3.0        
+[33] withr_2.5.0        bitops_1.0-7       R.methodsS3_1.8.2  grid_4.2.3        
+[37] jsonlite_1.8.4     gtable_0.3.3       lifecycle_1.0.3    magrittr_2.0.3    
+[41] scales_1.2.1       cli_3.6.1          stringi_1.7.12     farver_2.1.1      
+[45] remotes_2.4.2      rex_1.2.1          xml2_1.3.3         ragg_1.2.5        
+[49] generics_0.1.3     vctrs_0.6.2        cyclocomp_1.1.0    RColorBrewer_1.1-3
+[53] tools_4.2.3        R.cache_0.16.0     glue_1.6.2         hms_1.1.3         
+[57] processx_3.8.1     fastmap_1.1.1      yaml_2.3.7         timechange_0.2.0  
+[61] colorspace_2.1-0   plotly_4.10.1      knitr_1.42 
 
 # Time tracking
 ```{r}
@@ -300,7 +379,7 @@ fptm <- proc.time() - ptm
 # convert to minutes
 (fptm[3] / 60)
 
-# Time elapsed: 15 minutes
+# Time elapsed: 10 minutes
 ```
 
 # Reproducibility
