@@ -88,6 +88,15 @@ names(counts_ls) <- gsub(" ", "_", tolower(names(counts_ls)))
 
 # Save pseudo-bulked files
 ```{r}
+# create directory
+if (!dir.exists(
+  here("data", "pseudobulk")
+)) {
+  dir.create(
+    here("data", "pseudobulk")
+  )
+}
+
 # save pseudo-bulked counts list
 saveRDS(counts_ls, file = here("data", "pseudobulk", "all_counts_ls.rds"))
 
