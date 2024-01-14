@@ -139,11 +139,10 @@ sessionInfo()
 # [109] xtable_1.8-4           httpuv_1.6.9           R.utils_2.12.2        
 # [112] munsell_0.5.0          viridisLite_0.4.1
 # 
-# # time tracking
-# fptm <- proc.time() - ptm
-# fptm <- (fptm[3] / 60) / 60
-# print(paste0("Run time: ", fptm, " hours"))
-# 
+# time tracking
+ptm <- proc.time() - ptm
+fptm <- (fptm[3] / 60) / 60
+print(paste0("Run time: ", fptm, " hours"))
 # 3 hours and 45 minutes
 
 # Reproducibility:
