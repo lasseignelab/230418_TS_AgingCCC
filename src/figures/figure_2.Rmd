@@ -16,7 +16,7 @@ __Reproducibility__:
   * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
 
 __Data__:
-*Seurat objects*
+*Seurat object*
 * Name: processed_seurat.rds
 * Location: data/seurat_preprocessing/
  
