@@ -1,0 +1,315 @@
+---
+title: "figure_3"
+author: "Tabea M. Soelter"
+date: "2024-01-15"
+output: html_document
+---
+WiP for figure 3 - an overview of the CCC interactions 
+
+**Plotting Figure 3**
+
+__Goal__: This is a script for generating figure 3 of my manuscript.
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+  * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*MultiNicheNet object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+
+#__Analysis Plan__: EDIT THIS
+* Load necessary packages
+* Load data
+  * Seurat object
+* Plot individual panels
+  * A: UMAP w cell type assignments
+  * B: Violin plot with expression of marker genes
+  * C: UMAP split by condition
+  * D: Stacked barplot of cell type proportions by condition
+  * E: UMAP split by time point
+  * F: Stacked barplot of cell type proportions by time point
+* Compile figure
+* Save figure
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# set seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(Seurat)
+  library(ComplexUpset)
+  library(ggpattern)
+  library(patchwork)
+  library(cowplot)
+  library(ggpubr)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+```
+
+# Colors
+```{r}
+colors <- c(
+  `Oligodendrocytes` = "royalblue3",
+  `Microglia` = "orchid3",
+  `OPCs` = "mediumpurple1",
+  `Astrocytes` = "cornflowerblue",
+  `Excitatory Neurons` = "slateblue3",
+  `Inhibitory Neurons` = "darkslategray3",
+  `Pericytes` = "deepskyblue3",
+  `Endothelial cells` = "darkolivegreen4",
+  `Meningeal cells` = "seagreen4",
+  `Ependymal cells` = "lightcoral",
+  `Fibroblasts` = "olivedrab3",
+  `RGCs` = "violetred2"
+)
+```
+
+# Set filtering criteria
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# vector of groups
+group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+```
+
+# Filter MultiNicheNet output
+```{r}
+output_filt <-  filter_nichenet(output)
+```
+
+# Figure 3A
+* Group bar chart of the number of interactions across senders by group (condition/time point)
+```{r}
+prior_num <- output_filt %>%
+  group_by(sender, group) %>%
+  summarize(interactions = n_distinct(id_target)) %>%
+  mutate(condition = ifelse(group %in% c("X6mAD", "X12mAD"), "AD", "WT")) 
+
+prior_num2$time_point <- sub("X(\\d+m)(AD|WT)", "\\1", prior_num$group)
+
+grouped_bar <-
+ggplot(data = prior_num2, aes(x = sender, y = interactions, fill = condition, pattern = time_point)) +
+  geom_bar_pattern(stat = 'identity', position = position_dodge(preserve = "single"), color = "black", 
+                   pattern_fill = "black",
+                   pattern_angle = 45,
+                   pattern_density = 0.1,
+                   pattern_spacing = 0.025,
+                   pattern_key_scale_factor = 0.6) +
+  geom_text(aes(label = interactions, interactions = interactions + 0.05),
+            position = position_dodge(0.9),
+            vjust = -0.3,
+            fontface = "bold",
+            size = 3.5) +
+  expand_limits(y = 650)+
+  scale_fill_manual(values = c(
+    `AD` = "#A6CEE3",
+    `WT` = "#1F78B4"
+  )) +
+  scale_pattern_manual(values = c(`6m` = "stripe", `12m` = "none")) +
+  labs(x = "Sender", y = "# of Interactions", pattern = "Time Point", fill = "Condition") + 
+  guides(pattern = guide_legend(override.aes = list(fill = "white")),
+         fill = guide_legend(override.aes = list(pattern = "none"))) +
+  theme_bw() +
+  theme(axis.text.y = element_text(face = "bold", color = "black", size = 12),
+        #axis.text.x = element_text(face = "bold", color = "black", size = 10, angle = 45, hjust = 1),
+        axis.text.x = element_text(face = "bold", color = "black", size = 12),
+        axis.title = element_text(face = "bold", color = "black", size = 14),
+        legend.text = element_text(face = "bold", color = "black", size = 10),
+        legend.title = element_text(face = "bold", color = "black", size = 12))
+
+grouped_bar
+```
+
+# Figure 3B
+* Upset plot showing unique and shared interactions including receiver cell type
+```{r}
+# prepare df
+test2 <- output_filt %>%
+  select(sender, receiver, id_target, group) #%>%
+  #mutate(condition = substring(group, nchar(group) - 1, nchar(group))) %>%
+  #select(-group)
+
+test3 <- table(test2$id_target, test2$group)
+
+test3 <- as.data.frame(test3) %>%
+  pivot_wider(names_from = Var2,
+              values_from = Freq) %>%
+  as.data.frame()
+
+test3 <- test3 %>%
+  mutate(Receiver = str_extract(Var1, "(?<=_)([[:alnum:]]+\\.[[:alnum:]]+)(?=_)")) %>%
+  as.data.frame()
+
+
+test3$Receiver <- gsub("Excitatory.Neurons", "Excitatory Neurons", test3$Receiver)
+test3$Receiver <- gsub("Inhibitory.Neurons", "Inhibitory Neurons", test3$Receiver)
+
+colnames(test3) <- sub("^X", "", colnames(test3))
+
+
+# pull out time point/condition columns
+groups = colnames(test3)[2:5]
+groups # should return our 4 groups
+
+# Changing binary format to T/F and adding back to df
+test3[groups] = test3[groups] == 1
+t(head(test3[groups], 3))
+
+
+# stacked bar plot
+upset <- upset(test3,
+               groups,
+               name = "Group", 
+               base_annotations = list(
+                 "Intersection Size" = intersection_size(
+                   counts = TRUE,
+                   mapping = aes(fill = Receiver),
+                   bar_number_threshold = 1,
+                   text = list(color = "black", fontface = "bold")) +
+                   theme_bw() +
+                   theme(axis.title.x = element_blank(),
+                         axis.text.x = element_blank(),
+                         axis.ticks.x = element_blank(),
+        legend.title = element_text(size = 14, face = "bold"),
+        legend.text = element_text(size = 12, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold")) +
+          expand_limits(y = 1700) +
+                   scale_fill_manual(
+                     values = c("Excitatory Neurons" = "slateblue3",
+                                "Inhibitory Neurons" = "darkslategray3"))),
+               themes = upset_default_themes(
+                 text = element_text(face = "bold",
+                                     color = "black"),
+                 axis.text.y = element_text(color = "black", face = "bold", size = 12),
+                 axis.title = element_text(size = 14)),
+               set_sizes = upset_set_size(position = "right") +
+                 geom_text(aes(label = ..count..),
+                           hjust = -0.1,
+                           stat = "count",
+                           size = 3.5,
+                           fontface = "bold") +
+                 expand_limits(y = 2100) +
+                 theme(axis.text.x = element_text(color = "black", size = 12),
+                       axis.title.x = element_text(size = 14),
+                       axis.text.y = element_blank()),
+               guides = "over") +
+  theme(text = element_text(face = "bold", color = "black"),
+        axis.title = element_text(size = 11)) 
+
+png(
+  here(
+    "results",
+    "final_outputs",
+    "03_ccc",
+    "upset.png"
+  ),
+  width = 200,
+  height = 200,
+  units = "mm",
+  res = 300
+)
+upset
+dev.off()
+```
+
+# Compile Figure
+```{r}
+# v4 - me likey 
+top <- ggarrange(grouped_bar,
+                 labels = c("A"))
+
+middle <- ggarrange(upset,
+                    labels = c("B"))
+
+bottom <- ggarrange(shared_bar2,
+                    unique_6m_bar,
+                    unique_12m_bar,
+                    ncol = 3,
+                    labels = c("C", "D", "E"))
+
+fig3_v4 <- ggarrange(top,
+                     middle,
+                     bottom,
+                     nrow = 3,
+                     heights = c(1, 1.7, 1.3))
+
+
+
+png(
+  here(
+    "results",
+    "final_outputs",
+    "01_figures",
+    "figure3_v4.png"
+  ),
+  width = 300,
+  height = 325,
+  units = "mm",
+  res = 300
+)
+fig3_v4
+dev.off()
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: < 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "figures",
+  "figure_3.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "figures",
+  "figure_3.Rmd"
+))
+```
