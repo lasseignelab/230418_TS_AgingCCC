@@ -1,0 +1,400 @@
+---
+title: "02_pathway_analysis_targets"
+author: "Tabea M. Soelter"
+date: "2024-01-08"
+output: html_document
+---
+**Pathway Analysis of predicted target genes using gprofiler2**
+
+__Goal__: Perform pathway analyses for genes that were predicted as potential downstream targets in inhibitory and excitatory neurons of CCC interactions altered in AD. 
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.1
+* HPC: Yes
+  * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*Seurat object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * MultiNicheNet object
+* Filter object to get target genes
+* Pathway Analysis using gprofiler2
+  * Plotting of pathways
+  * Saving plots
+* Save FEA outputs
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(gprofiler2)
+  library(tidyverse)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+```
+
+# Set filtering criteria
+* These are continuously the same throughout the project
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# set groups to filter for (in this case all of them)
+group_oi <- c("X6mWT", "X6mAD", "X12mWT", "X12mAD")
+```
+
+# Filter MultiNicheNet output
+```{r}
+prior <- filter_nichenet(output)
+
+# select needed columns
+prior_filt <- prior %>%
+  select("id_target", "sender", "target", "group")
+```
+
+# FEA: Shared genes
+* Shared = genes shared between the 6- and 12-month time points within the same condition
+* The fea function is a wrapper for code adapted from Elizabeth J. Wilk
+```{r}
+# Filter duplicate interactions
+shared <- prior_filt %>%
+  group_by(id_target) %>%
+  filter(n() > 1)
+
+# New column based on group column (i.e. Both 6mAD & 12mAD = AD, same for WT)
+shared$condition <- substring(
+  shared$group,
+  nchar(shared$group) - 1,
+  nchar(shared$group)
+)
+
+# Remove old column to get unique interactions
+shared <- shared %>%
+  select(-group)
+
+shared <- unique(shared)
+
+# Filter and select columns of interest
+shared_filt <- shared %>%
+  ungroup() %>%
+  select(target, condition) %>%
+  unique()
+
+# Filter for AD-specific genes and perform FEA
+shared_ad <- shared_filt %>%
+  filter(condition == "AD") %>%
+  select(target) %>%
+  as.list()
+
+fea_res_ad <- fea(shared_ad$target)
+
+# Filter for WT-specific genes and perform FEA
+shared_wt <- shared_filt %>%
+  filter(condition == "WT") %>%
+  select(target) %>%
+  as.list()
+
+fea_res_wt <- fea(shared_wt$target)
+
+# Adding condition information before combining FEA outputs for plotting
+fea_res_ad_shared <- fea_res_ad %>%
+  mutate(condition = "AD")
+
+fea_res_wt_shared <- fea_res_wt %>%
+  mutate(condition = "WT")
+
+fea_res_shared <- rbind(fea_res_ad_shared, fea_res_wt_shared)
+```
+
+# Plotting shared pathways
+```{r}
+bubbleplot_shared <- ggplot(
+  fea_res_shared,
+  aes(
+    x = condition,
+    y = reorder(term_name, -p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(palette = "Greens") +
+  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  ggtitle("Top Enriched Terms for Target\nGenes Shared Across Timepoints") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(face = "bold"),
+    text = element_text(face = "bold")
+  )
+
+bubbleplot_shared
+
+ggsave(
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "fea_shared_bubbleplot.png"
+  ),
+  bubbleplot_shared,
+  dpi = 400,
+  width = 8,
+  height = 7,
+  bg = "#ffffff"
+)
+```
+
+# Filter for unique genes 
+* shared_filt includes all targets that are somehow shared 
+  * This includes interactions shared between 6m and 12m
+  * I am filtering condition and time point pairings to exclude any of those above targets (even if the LR pair is different than in the shared interactions, bc the target is still shared, implying the same downstream effect) 
+```{r}
+targets_6m_ad <- prior_filt %>%
+  filter(group == "X6mAD") %>%
+  filter(!target %in% shared_filt$target) # 75
+
+targets_6m_wt <- prior_filt %>%
+  filter(group == "X6mWT") %>%
+  filter(!target %in% shared_filt$target) # 66
+
+targets_12m_ad <- prior_filt %>%
+  filter(group == "X12mAD") %>%
+  filter(!target %in% shared_filt$target) # 1624
+
+targets_12m_wt <- prior_filt %>%
+  filter(group == "X12mWT") %>%
+  filter(!target %in% shared_filt$target) # 429
+```
+
+# FEA: Unique genes - 6-month
+```{r}
+# FEA on 6m unique genes by condition, then combine for plotting
+fea_res_6m_ad_unique <- fea(targets_6m_ad$target) %>%
+  mutate(condition = "AD")
+
+fea_res_6m_wt_unique <- fea(targets_6m_wt$target) %>%
+  mutate(condition = "WT")
+
+fea_res_6m <- rbind(fea_res_6m_ad_unique, fea_res_6m_wt_unique)
+```
+
+# Plotting 6-month pathways
+```{r}
+bubbleplot_6m_unique <- ggplot(
+  fea_res_6m,
+  aes(
+    x = condition,
+    y = reorder(term_name, -p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(palette = "Greens") +
+  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  theme_minimal() +
+  ggtitle("Top Enriched Terms for Target\nGenes at 6-month time point") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(face = "bold"),
+    text = element_text(face = "bold")
+  )
+
+bubbleplot_6m_unique
+
+ggsave(
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "fea_6m_bubbleplot.png"
+  ),
+  bubbleplot_6m_unique,
+  dpi = 400,
+  width = 8,
+  height = 7,
+  bg = "#ffffff"
+)
+```
+
+# FEA: Unique genes - 12-month
+```{r}
+# FEA on 12m unique genes by condition, then combine for plotting
+fea_res_12m_ad_unique <- fea(targets_12m_ad$target) %>%
+  mutate(condition = "AD")
+
+fea_res_12m_wt_unique <- fea(targets_12m_wt$target) %>%
+  mutate(condition = "WT")
+
+fea_res_12m <- rbind(fea_res_12m_ad_unique, fea_res_12m_wt_unique)
+```
+
+# Plotting 12-month pathways
+```{r}
+bubbleplot_12m_unique <- ggplot(
+  fea_res_12m,
+  aes(
+    x = condition,
+    y = reorder(term_name, -p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(palette = "Greens") +
+  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  theme_minimal() +
+  ggtitle("Top Enriched Terms for Target\nGenes at 12-month time point") +
+  theme_minimal() +
+  theme(
+    axis.text = element_text(face = "bold"),
+    text = element_text(face = "bold")
+  )
+
+bubbleplot_12m_unique
+
+ggsave(
+  here(
+    "results",
+    "intermediate_outputs",
+    "04_ccc",
+    "fea_12m_bubbleplot.png"
+  ),
+  bubbleplot_12m_unique,
+  dpi = 400,
+  width = 8,
+  height = 7,
+  bg = "#ffffff"
+)
+```
+
+# Save filtered FEA outputs
+```{r}
+saveRDS(fea_res_shared, file = here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_shared.rds"
+))
+
+saveRDS(fea_res_6m, file = here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_6m.rds"
+))
+
+saveRDS(fea_res_12m, file = here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_12m.rds"
+))
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2      styler_1.9.1     here_1.0.1       lubridate_1.9.2 
+ [5] forcats_1.0.0    stringr_1.5.0    dplyr_1.1.1      purrr_1.0.1     
+ [9] readr_2.1.4      tidyr_1.3.0      tibble_3.2.1     ggplot2_3.4.2   
+[13] tidyverse_2.0.0  gprofiler2_0.2.1
+
+loaded via a namespace (and not attached):
+ [1] ps_1.7.5           rprojroot_2.0.3    digest_0.6.31      utf8_1.2.3        
+ [5] R6_2.5.1           evaluate_0.20      httr_1.4.5         pillar_1.9.0      
+ [9] rlang_1.1.0        lazyeval_0.2.2     rstudioapi_0.14    data.table_1.14.8 
+[13] callr_3.7.3        R.utils_2.12.2     R.oo_1.25.0        rmarkdown_2.21    
+[17] textshaping_0.3.6  labeling_0.4.2     desc_1.4.2         htmlwidgets_1.6.2 
+[21] RCurl_1.98-1.12    munsell_0.5.0      compiler_4.2.3     xfun_0.38         
+[25] systemfonts_1.0.4  pkgconfig_2.0.3    htmltools_0.5.5    tidyselect_1.2.0  
+[29] fansi_1.0.4        viridisLite_0.4.1  crayon_1.5.2       tzdb_0.3.0        
+[33] withr_2.5.0        bitops_1.0-7       R.methodsS3_1.8.2  grid_4.2.3        
+[37] jsonlite_1.8.4     gtable_0.3.3       lifecycle_1.0.3    magrittr_2.0.3    
+[41] scales_1.2.1       cli_3.6.1          stringi_1.7.12     farver_2.1.1      
+[45] remotes_2.4.2      rex_1.2.1          xml2_1.3.3         ragg_1.2.5        
+[49] generics_0.1.3     vctrs_0.6.2        cyclocomp_1.1.0    RColorBrewer_1.1-3
+[53] tools_4.2.3        R.cache_0.16.0     glue_1.6.2         hms_1.1.3         
+[57] processx_3.8.1     fastmap_1.1.1      yaml_2.3.7         timechange_0.2.0  
+[61] colorspace_2.1-0   plotly_4.10.1      knitr_1.42 
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 10 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "ccc",
+  "02_pathway_analysis_targets.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "ccc",
+  "02_pathway_analysis_targets.Rmd"
+))
+```

@@ -590,7 +590,7 @@ filter_nichenet <- function(object) {
     inner_join(object$ligand_activities_targets_DEgenes$ligand_activities %>%
                  distinct(ligand, target, direction_regulation, contrast)) %>%
     inner_join(contrast_tbl) %>%
-    filter(group == group_oi, receiver %in% receiver_oi, sender %in% sender_oi)
+    filter(group %in% group_oi, receiver %in% receiver_oi, sender %in% sender_oi)
   
   lr_target_prior_cor_filtered_up <- lr_target_prior_cor_filtered %>%
     filter(direction_regulation == "up") %>%
@@ -615,4 +615,143 @@ filter_nichenet <- function(object) {
     lr_target_prior_cor_filtered$id,
     perl = TRUE)
   return(lr_target_prior_cor_filtered)
+}
+
+## fea
+# A function to perform pathway analysis using gprofiler2 and filters for the top 15 pathways for plotting purposes.
+# Original code from Elizabeth J. Wilk, adapted by TMS
+fea <- function(genes){
+  set.seed(42)
+  # create gprofiler2 query ----------
+  fea_result <- gost(query = genes,
+                     organism = "mmusculus",
+                     ordered_query = FALSE,
+                     multi_query = FALSE,
+                     significant = TRUE,
+                     exclude_iea = FALSE,
+                     measure_underrepresentation = FALSE,
+                     evcodes = TRUE,
+                     user_threshold = 0.05,
+                     correction_method = "bonferroni",
+                     domain_scope = "annotated",
+                     numeric_ns = "",
+                     sources = NULL,
+                     as_short_link = FALSE) 
+  # remove arbitrary pathways ----------
+  fea_result <- fea_result$result %>% filter(term_size < 1000 | term_size > 10)
+  # keep only top 15 pathways for plotting purposes ---------
+  fea_result_filt <- fea_result %>% top_n(n = 15)
+  return(fea_result_filt)
+}
+
+## jaccard
+# A function calculating jaccard similarity index values
+# Not written by me, this formula can be found in multiple places and forums
+jaccard <- function(a, b) {
+  intersection = length(intersect(a, b))
+  union = length(a) + length(b) - intersection
+  return (intersection/union)
+}
+
+## calculate_jaccard
+# a wrapper for code written by Vishal H. Oza. I modified his code for my own usage.
+calculate_jaccard <- function(df, senders, receivers, type) {
+  if(type == "ligands") {
+    # empty list
+    jaccard_results <- list()
+    # calculate JI for ligands across all senders by receivers
+    for (i in receivers) {
+      filtered_receiver <- df %>% filter(receiver == i) %>% select(c("sender", "ligand"))
+      
+      for (cell_type in senders) {
+        genes <- unique(filtered_receiver$ligand[filtered_receiver$sender == cell_type]) 
+        
+        for (other_cell_type in senders[senders != cell_type]) {
+          other_genes <- unique(filtered_receiver$ligand[filtered_receiver$sender == other_cell_type])
+          
+          jaccard_index <- jaccard(genes, other_genes) 
+          
+          result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+          jaccard_results[[result_key]] <- jaccard_index
+        }
+      }
+    }
+  } else if(type == "receptors") {
+    # empty list
+    jaccard_results <- list()
+    # calculate JI for receptors across all senders by receivers
+    for (i in receivers) {
+      filtered_receiver <- df %>% filter(receiver == i) %>% select(c("sender", "receptor"))
+      
+      for (cell_type in senders) {
+        genes <- unique(filtered_receiver$receptor[filtered_receiver$sender == cell_type]) 
+        
+        for (other_cell_type in senders[senders != cell_type]) {
+          other_genes <- unique(filtered_receiver$receptor[filtered_receiver$sender == other_cell_type])
+          
+          jaccard_index <- jaccard(genes, other_genes) 
+          
+          result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+          jaccard_results[[result_key]] <- jaccard_index
+        }
+      }
+    }
+  } else if(type == "targets") {
+    # empty list
+    jaccard_results <- list()
+    # # calculate JI for targets across all senders by receivers
+    for (i in receivers) {
+      filtered_receiver <- df %>% filter(receiver == i) %>% select(c("sender", "target"))
+      
+      for (cell_type in senders) {
+        genes <- unique(filtered_receiver$target[filtered_receiver$sender == cell_type]) 
+        
+        for (other_cell_type in senders[senders != cell_type]) {
+          other_genes <- unique(filtered_receiver$target[filtered_receiver$sender == other_cell_type])
+          
+          jaccard_index <- jaccard(genes, other_genes) 
+          
+          result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+          jaccard_results[[result_key]] <- jaccard_index
+        }
+      }
+    }
+  } else {
+    print("Please set either ligands, receptors, or targets equal to TRUE")
+  } 
+  return(jaccard_results)
+}
+
+## calculate_jaccard2
+# Modified wrapper of calculate_jaccard wrapper. Original code adapted from Vishal H. Oza
+calculate_jaccard2 <- function(df, senders, receivers, type) {
+  jaccard_results <- list()
+  
+  for (i in senders) {
+    filtered_receiver <- df %>% filter(sender == i) %>% select(c("receiver", type))
+    
+    if(type == "receptor") {
+      for (cell_type in receivers) {
+        genes <- unique(filtered_receiver$receptor[filtered_receiver$receiver == cell_type]) 
+        
+        for (other_cell_type in receivers[receivers != cell_type]) {
+          other_genes <- unique(filtered_receiver$receptor[filtered_receiver$receiver == other_cell_type])
+        }
+      }
+    } else if(type == "target") {
+      for (cell_type in receivers) {
+        genes <- unique(filtered_receiver$target[filtered_receiver$receiver == cell_type]) 
+        
+        for (other_cell_type in receivers[receivers != cell_type]) {
+          other_genes <- unique(filtered_receiver$target[filtered_receiver$receiver == other_cell_type])
+        }
+      }
+    }
+    jaccard_index <- jaccard(genes, other_genes) 
+    result_key <- paste(i, cell_type, other_cell_type, sep = "_")
+    jaccard_results[[result_key]] <- jaccard_index
+  }
+  
+  
+  return(jaccard_results)
 }

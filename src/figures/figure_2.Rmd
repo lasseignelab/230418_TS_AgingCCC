@@ -1,0 +1,500 @@
+---
+title: "figure_2"
+author: "Tabea M. Soelter"
+date: "2024-01-11"
+output: html_document
+---
+**Plotting Figure 2**
+
+__Goal__: This is a script for generating figure 2 of my manuscript.
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.1
+* HPC: Yes
+  * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*Seurat object*
+* Name: processed_seurat.rds
+* Location: data/seurat_preprocessing/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * Seurat object
+* Plot individual panels
+  * A: UMAP w cell type assignments
+  * B: Violin plot with expression of marker genes
+  * C: UMAP split by condition
+  * D: Stacked barplot of cell type proportions by condition
+  * E: UMAP split by time point
+  * F: Stacked barplot of cell type proportions by time point
+* Compile figure
+* Save figure
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# set seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(Seurat)
+  library(circlize)
+  library(ComplexHeatmap)
+  library(RColorBrewer)
+  library(reshape2)
+  library(patchwork)
+  library(cowplot)
+  library(ggpubr)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+```
+
+# Load in object
+```{r}
+seurat_obj <- readRDS(here(
+  "data",
+  "seurat",
+  "processed_seurat.rds"
+))
+```
+
+# Set color palette
+```{r}
+colors <- c(
+  `Oligodendrocytes` = "royalblue3",
+  `Microglia` = "orchid3",
+  `OPCs` = "mediumpurple1",
+  `Astrocytes` = "cornflowerblue",
+  `Excitatory Neurons` = "slateblue3",
+  `Inhibitory Neurons` = "darkslategray3",
+  `Pericytes` = "deepskyblue3",
+  `Endothelial cells` = "darkolivegreen4",
+  `Meningeal cells` = "seagreen4",
+  `Ependymal cells` = "lightcoral",
+  `Fibroblasts` = "olivedrab3",
+  `RGCs` = "violetred2"
+)
+```
+
+# Figure 2A
+* UMAP of assigned cell types
+```{r}
+umap_1 <- DimPlot(seurat_obj,
+  cols = colors,
+  label = TRUE,
+  label.box = TRUE,
+  label.color = "white",
+  label.size = 3.75,
+  repel = TRUE,
+  seed = 42
+) +
+  labs(color = "Cell Type") +
+  theme(
+    axis.text = element_text(face = "bold"),
+    legend.title = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  ) +
+  ylab("UMAP 2") +
+  xlab("UMAP 1") +
+  NoLegend()
+
+png(
+  here(
+    "results",
+    "final_outputs",
+    "02_seurat",
+    "UMAP_final2.png"
+  ),
+  width = 200,
+  height = 205,
+  units = "mm",
+  res = 300
+)
+umap_1
+dev.off()
+```
+
+# Figure 2B
+* Violin plot of the marker gene expression of the assigned cell types
+* We typically used more than one marker, these are representative 
+```{r}
+markers <- c(
+  "Slc1a2",
+  "Flt1",
+  "Spag16",
+  "Slc17a6",
+  "Bnc2",
+  "Gad2",
+  "Ranbp3l",
+  "Dock8",
+  "Mbp",
+  "Vcan",
+  "Pdgfrb",
+  "Slc18a2"
+)
+
+# Re-order levels for plotting
+my_levels <- c(
+  "RGCs",
+  "Pericytes",
+  "OPCs",
+  "Oligodendrocytes",
+  "Microglia",
+  "Meningeal cells",
+  "Inhibitory Neurons",
+  "Fibroblasts",
+  "Excitatory Neurons",
+  "Ependymal cells",
+  "Endothelial cells",
+  "Astrocytes"
+)
+
+seurat_obj_ord <- seurat_obj
+
+seurat_obj_ord@active.ident <- factor(seurat_obj@active.ident,
+  levels = fct_rev(my_levels)
+)
+
+# Plot stacked violin plot
+violin <- VlnPlot(seurat_obj_ord,
+  markers,
+  stack = TRUE,
+  sort = FALSE,
+  flip = FALSE,
+  assay = "RNA",
+  fill.by = "ident",
+  cols = colors
+) +
+  theme(
+    axis.text.x = element_blank(),
+    legend.position = "right",
+    panel.grid = element_blank(),
+    axis.ticks.x = element_blank(),
+    axis.text.y = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  ) +
+  xlab("Marker Gene Expression") +
+  ylab("Cell Type") +
+  theme(legend.position = "none")
+
+# Save stacked violin plot
+png(
+  here(
+    "results",
+    "final_outputs",
+    "02_seurat",
+    "markers_violin_final.png"
+  ),
+  width = 200,
+  height = 180,
+  units = "mm",
+  res = 300
+)
+violin
+dev.off()
+```
+
+# Figure 2C
+* UMAP split by condition
+```{r}
+umap_2 <- DimPlot(seurat_obj,
+  group.by = "orig.ident",
+  cols = "Paired",
+  shuffle = TRUE,
+  seed = 42
+) +
+  theme(
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(face = "bold"),
+    axis.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  ) +
+  labs(color = "Condition") +
+  ylab("UMAP 2") +
+  xlab("UMAP 1")
+
+# remove title
+umap_2 <- umap_2 + ggtitle(NULL)
+
+png(
+  here(
+    "results",
+    "final_outputs",
+    "02_seurat",
+    "UMAP_condition_final.png"
+  ),
+  width = 175,
+  height = 175,
+  units = "mm",
+  res = 300
+)
+umap_2
+dev.off()
+```
+
+# Figure 2D
+* Stacked barplot of cell type proportion distribution across conditions
+```{r}
+#  pull out cell type information
+df <- table(Idents(seurat_obj), seurat_obj$orig.ident) %>% as.data.frame()
+
+# change class for plotting purposes
+df$Var1 <- as.character(df$Var1)
+
+# plot
+barplot <- ggplot(df, aes(x = fct_rev(Var1), y = Freq, fill = Var2)) +
+  theme_bw(base_size = 15) +
+  geom_col(position = "fill", width = 0.5) +
+  xlab("Cell Type") +
+  ylab("Proportion") +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(12, "Paired")) +
+  theme(
+    legend.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(face = "bold", colour = "black"),
+    legend.text = element_text(face = "bold", size = 12),
+    axis.text.x = element_text()
+  ) +
+  coord_flip() +
+  labs(fill = "Condition")
+
+# save plot
+png(
+  here(
+    "results",
+    "final_outputs",
+    "02_seurat",
+    "stacked_barplot_condition.png"
+  ),
+  width = 200,
+  height = 225,
+  units = "mm",
+  res = 300
+)
+barplot
+dev.off()
+```
+
+# Figure 2E
+* UMAP split by time point
+```{r}
+umap_3 <- DimPlot(seurat_obj,
+  group.by = "timepoint",
+  cols = RColorBrewer::brewer.pal(10, "Paired")[9:10],
+  shuffle = TRUE,
+  seed = 42
+) +
+  theme(
+    legend.title = element_text(face = "bold"),
+    legend.text = element_text(face = "bold"),
+    axis.text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold")
+  ) +
+  labs(color = "Time Point") +
+  ylab("UMAP 2") +
+  xlab("UMAP 1")
+
+# remove title
+umap_3 <- umap_3 + ggtitle(NULL)
+
+png(
+  here(
+    "results",
+    "final_outputs",
+    "02_seurat",
+    "UMAP_timepoint_final.png"
+  ),
+  width = 175,
+  height = 175,
+  units = "mm",
+  res = 300
+)
+umap_3
+dev.off()
+```
+
+# Figure 2F
+* Stacked barplot of cell type proportion distribution across time points
+```{r}
+#  pull out cell type information
+df <- table(Idents(seurat_obj), seurat_obj$timepoint) %>% as.data.frame()
+
+# change classs for plotting purposes
+df$Var1 <- as.character(df$Var1)
+
+barplot2 <- ggplot(df, aes(x = fct_rev(Var1), y = Freq, fill = Var2)) +
+  theme_bw(base_size = 15) +
+  geom_col(position = "fill", width = 0.5) +
+  scale_fill_manual(values = RColorBrewer::brewer.pal(12, "Paired")[9:10]) +
+  theme(
+    legend.title = element_text(face = "bold", size = 14),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(face = "bold", color = "black"),
+    legend.text = element_text(face = "bold", size = 12),
+    axis.text.x = element_text()
+  ) +
+  coord_flip() +
+  xlab("Cell Type") +
+  ylab("Proportion") +
+  labs(fill = "Time Point")
+
+png(
+  here(
+    "results",
+    "final_outputs",
+    "02_seurat",
+    "stacked_barplot_timepoint.png"
+  ),
+  width = 200,
+  height = 225,
+  units = "mm",
+  res = 300
+)
+barplot2
+dev.off()
+```
+
+# Compile figure 2
+```{r}
+# Compile left side first for alignment purposes
+left <- plot_grid(umap_1,
+  umap_2,
+  umap_3,
+  nrow = 3,
+  align = "hv",
+  labels = c("A", "C", "E")
+)
+
+# Compile the right side
+right <- plot_grid(
+  violin +
+    geom_line(aes(color = "Test")) +
+    scale_color_manual(values = NA) +
+    theme(
+      legend.text = element_blank(),
+      legend.title = element_blank()
+    ),
+  barplot +
+    theme(legend.justification = "left"),
+  barplot2 +
+    theme(legend.justification = "left"),
+  ncol = 1,
+  labels = c("B", "D", "F")
+)
+
+fig2 <- plot_grid(
+  left,
+  right
+)
+
+# save compiled figure
+png(here("results", "final_outputs", "01_figures", "figure2.png"),
+  width = 375,
+  height = 300,
+  units = "mm",
+  res = 300
+)
+fig2
+dev.off()
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] grid      stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2           styler_1.9.1          here_1.0.1            ggpubr_0.6.0         
+ [5] cowplot_1.1.1         patchwork_1.1.2       reshape2_1.4.4        RColorBrewer_1.1-3   
+ [9] ComplexHeatmap_2.14.0 circlize_0.4.15       SeuratObject_4.1.3    Seurat_4.3.0         
+[13] lubridate_1.9.2       forcats_1.0.0         stringr_1.5.0         dplyr_1.1.1          
+[17] purrr_1.0.1           readr_2.1.4           tidyr_1.3.0           tibble_3.2.1         
+[21] ggplot2_3.4.2         tidyverse_2.0.0      
+
+loaded via a namespace (and not attached):
+  [1] backports_1.4.1        plyr_1.8.8             igraph_1.4.2           lazyeval_0.2.2        
+  [5] sp_1.6-0               splines_4.2.3          listenv_0.9.0          scattermore_0.8       
+  [9] digest_0.6.31          foreach_1.5.2          htmltools_0.5.5        fansi_1.0.4           
+ [13] magrittr_2.0.3         tensor_1.5             cluster_2.1.4          doParallel_1.0.17     
+ [17] ROCR_1.0-11            remotes_2.4.2          tzdb_0.3.0             globals_0.16.2        
+ [21] matrixStats_0.63.0     R.utils_2.12.2         timechange_0.2.0       spatstat.sparse_3.0-1 
+ [25] colorspace_2.1-0       ggrepel_0.9.3          xfun_0.38              callr_3.7.3           
+ [29] crayon_1.5.2           jsonlite_1.8.4         progressr_0.13.0       spatstat.data_3.0-1   
+ [33] survival_3.5-5         zoo_1.8-12             iterators_1.0.14       glue_1.6.2            
+ [37] polyclip_1.10-4        gtable_0.3.3           leiden_0.4.3           GetoptLong_1.0.5      
+ [41] R.cache_0.16.0         car_3.1-2              future.apply_1.10.0    shape_1.4.6           
+ [45] BiocGenerics_0.44.0    abind_1.4-5            scales_1.2.1           rstatix_0.7.2         
+ [49] spatstat.random_3.1-4  miniUI_0.1.1.1         Rcpp_1.0.10            viridisLite_0.4.1     
+ [53] xtable_1.8-4           clue_0.3-64            reticulate_1.28        stats4_4.2.3          
+ [57] rex_1.2.1              htmlwidgets_1.6.2      httr_1.4.5             ellipsis_0.3.2        
+ [61] ica_1.0-3              farver_2.1.1           R.methodsS3_1.8.2      pkgconfig_2.0.3       
+ [65] uwot_0.1.14            deldir_1.0-6           utf8_1.2.3             labeling_0.4.2        
+ [69] tidyselect_1.2.0       rlang_1.1.0            later_1.3.0            munsell_0.5.0         
+ [73] tools_4.2.3            cli_3.6.1              generics_0.1.3         broom_1.0.4           
+ [77] ggridges_0.5.4         fastmap_1.1.1          goftest_1.2-3          processx_3.8.1        
+ [81] knitr_1.42             fitdistrplus_1.1-8     RANN_2.6.1             pbapply_1.7-0         
+ [85] future_1.32.0          nlme_3.1-162           mime_0.12              R.oo_1.25.0           
+ [89] xml2_1.3.3             compiler_4.2.3         rstudioapi_0.14        plotly_4.10.1         
+ [93] png_0.1-8              ggsignif_0.6.4         spatstat.utils_3.0-2   stringi_1.7.12        
+ [97] ps_1.7.5               cyclocomp_1.1.0        desc_1.4.2             lattice_0.21-8        
+[101] Matrix_1.5-4           vctrs_0.6.2            pillar_1.9.0           lifecycle_1.0.3       
+[105] spatstat.geom_3.1-0    lmtest_0.9-40          GlobalOptions_0.1.2    RcppAnnoy_0.0.20      
+[109] data.table_1.14.8      irlba_2.3.5.1          httpuv_1.6.9           R6_2.5.1              
+[113] promises_1.2.0.1       KernSmooth_2.23-20     gridExtra_2.3          IRanges_2.32.0        
+[117] parallelly_1.35.0      codetools_0.2-19       MASS_7.3-58.3          rprojroot_2.0.3       
+[121] rjson_0.2.21           withr_2.5.0            sctransform_0.4.1      S4Vectors_0.36.2      
+[125] parallel_4.2.3         hms_1.1.3              carData_3.0-5          Rtsne_0.16            
+[129] spatstat.explore_3.1-0 shiny_1.7.4
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: < 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "figures",
+  "figure_2.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "figures",
+  "figure_2.Rmd"
+))
+```

@@ -151,12 +151,14 @@ dev.off()
     * These are loaded during the "Determine cell cycle effects" chunk below
 ```{r eval=FALSE, include=FALSE}
 s_genes_mm <- gorth(cc.genes.updated.2019$s.genes,
-                    source_organism = "hsapiens",
-                    target_organism = "mmusculus")$ortholog_name
+  source_organism = "hsapiens",
+  target_organism = "mmusculus"
+)$ortholog_name
 
 g2m_genes_mm <- gorth(cc.genes.updated.2019$g2m.genes,
-                      source_organism = "hsapiens",
-                      target_organism = "mmusculus")$ortholog_name
+  source_organism = "hsapiens",
+  target_organism = "mmusculus"
+)$ortholog_name
 
 # saving both converted gene sets for later use
 saveRDS(s_genes_mm, file = here("doc", "s_genes_mm.rds"))
@@ -179,8 +181,9 @@ pdf(file = here(
 ))
 
 filtered_seurat <- cell_cycle_effects(filtered_seurat,
-                                      g2m_genes = g2m_genes,
-                                      s_genes = s_genes)
+  g2m_genes = g2m_genes,
+  s_genes = s_genes
+)
 
 dev.off()
 ```
@@ -188,6 +191,7 @@ dev.off()
 # Normalization and integration
 * We are using harmony as it has been shown to remove technical variation while preserving biological variation.
 * We will have to provide the PCs from the elbow plot above (1:20)
+* RunUMAP may introduce some slight differences in its UMAP loadings. This should not affect downstream cell type assignment (including marker gene identification)
 ```{r warning=FALSE}
 filtered_seurat <- harmony_integration(filtered_seurat, dims = 1:20)
 # harmony converged after 10 iterations
@@ -202,6 +206,65 @@ saveRDS(filtered_seurat, file = here("data", "seurat", "integrated_seurat.rds"))
 ```{r}
 sessionInfo() # see output below
 ```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2        styler_1.9.1       here_1.0.1         gprofiler2_0.2.1   scCustomize_1.1.1 
+ [6] clustree_0.5.0     ggraph_2.1.0       harmony_0.1.0      Rcpp_1.0.10        lubridate_1.9.2   
+[11] forcats_1.0.0      stringr_1.5.0      dplyr_1.1.1        purrr_1.0.1        readr_2.1.4       
+[16] tidyr_1.3.0        tibble_3.2.1       ggplot2_3.4.2      tidyverse_2.0.0    SeuratObject_4.1.3
+[21] Seurat_4.3.0      
+
+loaded via a namespace (and not attached):
+  [1] circlize_0.4.15        plyr_1.8.8             igraph_1.4.2           lazyeval_0.2.2        
+  [5] sp_1.6-0               splines_4.2.3          listenv_0.9.0          scattermore_0.8       
+  [9] digest_0.6.31          htmltools_0.5.5        viridis_0.6.2          fansi_1.0.4           
+ [13] magrittr_2.0.3         tensor_1.5             paletteer_1.5.0        cluster_2.1.4         
+ [17] ROCR_1.0-11            remotes_2.4.2          tzdb_0.3.0             globals_0.16.2        
+ [21] graphlayouts_0.8.4     matrixStats_0.63.0     R.utils_2.12.2         timechange_0.2.0      
+ [25] spatstat.sparse_3.0-1  colorspace_2.1-0       ggrepel_0.9.3          xfun_0.38             
+ [29] crayon_1.5.2           callr_3.7.3            jsonlite_1.8.4         progressr_0.13.0      
+ [33] spatstat.data_3.0-1    survival_3.5-5         zoo_1.8-12             glue_1.6.2            
+ [37] polyclip_1.10-4        gtable_0.3.3           leiden_0.4.3           R.cache_0.16.0        
+ [41] future.apply_1.10.0    shape_1.4.6            abind_1.4-5            scales_1.2.1          
+ [45] spatstat.random_3.1-4  miniUI_0.1.1.1         viridisLite_0.4.1      xtable_1.8-4          
+ [49] reticulate_1.28        rex_1.2.1              htmlwidgets_1.6.2      httr_1.4.5            
+ [53] RColorBrewer_1.1-3     ellipsis_0.3.2         ica_1.0-3              R.methodsS3_1.8.2     
+ [57] pkgconfig_2.0.3        farver_2.1.1           uwot_0.1.14            deldir_1.0-6          
+ [61] utf8_1.2.3             janitor_2.2.0          labeling_0.4.2         tidyselect_1.2.0      
+ [65] rlang_1.1.0            reshape2_1.4.4         later_1.3.0            munsell_0.5.0         
+ [69] tools_4.2.3            cli_3.6.1              ggprism_1.0.4          generics_0.1.3        
+ [73] ggridges_0.5.4         fastmap_1.1.1          goftest_1.2-3          rematch2_2.1.2        
+ [77] processx_3.8.1         knitr_1.42             fitdistrplus_1.1-8     tidygraph_1.2.3       
+ [81] RANN_2.6.1             pbapply_1.7-0          future_1.32.0          nlme_3.1-162          
+ [85] mime_0.12              R.oo_1.25.0            ggrastr_1.0.1          xml2_1.3.3            
+ [89] compiler_4.2.3         rstudioapi_0.14        beeswarm_0.4.0         plotly_4.10.1         
+ [93] png_0.1-8              spatstat.utils_3.0-2   tweenr_2.0.2           stringi_1.7.12        
+ [97] ps_1.7.5               cyclocomp_1.1.0        desc_1.4.2             lattice_0.21-8        
+[101] Matrix_1.5-4           vctrs_0.6.2            pillar_1.9.0           lifecycle_1.0.3       
+[105] spatstat.geom_3.1-0    lmtest_0.9-40          GlobalOptions_0.1.2    RcppAnnoy_0.0.20      
+[109] data.table_1.14.8      cowplot_1.1.1          irlba_2.3.5.1          httpuv_1.6.9          
+[113] patchwork_1.1.2        R6_2.5.1               promises_1.2.0.1       KernSmooth_2.23-20    
+[117] gridExtra_2.3          vipor_0.4.5            parallelly_1.35.0      codetools_0.2-19      
+[121] MASS_7.3-58.3          rprojroot_2.0.3        withr_2.5.0            sctransform_0.4.1     
+[125] mgcv_1.8-42            parallel_4.2.3         hms_1.1.3              grid_4.2.3            
+[129] snakecase_0.11.0       Rtsne_0.16             spatstat.explore_3.1-0 ggforce_0.4.1         
+[133] shiny_1.7.4            ggbeeswarm_0.7.1  
 
 # Time tracking
 ```{r}
@@ -210,7 +273,7 @@ fptm <- proc.time() - ptm
 # convert to minutes
 (fptm[3] / 60)
 
-# Time elapsed: 45 minutes
+# Time elapsed: 30 minutes
 ```
 
 # Reproducibility
@@ -221,6 +284,7 @@ style_file(here(
   "seurat_preprocessing",
   "01_3xtgad_seurat_preprocessing.Rmd"
 ))
+
 # lintr
 lint(filename = here(
   "src",
