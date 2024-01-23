@@ -1,0 +1,226 @@
+---
+title: "figure_4"
+author: "Tabea M. Soelter"
+date: "2024-01-21"
+output: html_document
+---
+**Plotting Main Figure 4**
+
+__Goal__: This is a script for generating figure 4 of my manuscript.
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+    * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+#__Data__: EDIT THIS 
+*MultiNicheNet object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+
+#__Analysis Plan__: EDIT THIS - maybe not condition for heatmap ... we will see
+* Load necessary packages
+* Load data
+  * MultiNicheNet object
+* Plot individual panels:
+  * A: Heatmap of pseudobulk expression annotated by receiver, condition, and time point
+  * B: Bubble plot for6-month FEA
+  * C: Bubble plot for 12-month FEA
+* Compile figure
+* Save figure
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# set seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ComplexHeatmap)
+  library(RColorBrewer)
+  library(circlize)
+  library(patchwork)
+  library(cowplot)
+  library(ggpubr)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+
+-   DESeq2 inputs
+
+    -   inhibitory and excitatory neurons
+
+```{r}
+    excitatory_neurons_group_6mAD_vs_6mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/excitatory_neurons_group_6mAD_vs_6mWT_sig_genes.csv")
+
+    excitatory_neurons_group_12mAD_vs_12mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/excitatory_neurons_group_12mAD_vs_12mWT_sig_genes.csv")
+
+    # inhibitory neurons
+    inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes.csv")
+
+inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes.csv")
+```
+
+# Prepare dfs
+
+```{r}
+# add time point information
+excitatory_neurons_group_6mAD_vs_6mWT_sig_genes$time_point <- "6m"
+excitatory_neurons_group_12mAD_vs_12mWT_sig_genes$time_point <- "12m"
+inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes$time_point <- "6m"
+inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes$time_point <- "12m"
+
+# add receiver information
+excitatory_neurons_group_6mAD_vs_6mWT_sig_genes$receiver <- "excitatory_neurons"
+excitatory_neurons_group_12mAD_vs_12mWT_sig_genes$receiver <- "excitatory_neurons"
+inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes$receiver <- "inhibitory_neurons"
+inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes$receiver <- "inhibitory_neurons"
+
+# combine all 4 dfs into 1 for plotting purposes
+combined_df <- rbind(excitatory_neurons_group_6mAD_vs_6mWT_sig_genes,
+                     excitatory_neurons_group_12mAD_vs_12mWT_sig_genes,
+                     inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes,
+                     inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes) %>%
+  select(gene, log2FoldChange, pvalue, time_point, receiver) %>%
+  pivot_wider(
+    id_cols = gene,
+    names_from = c(time_point, receiver),
+    values_from = c(log2FoldChange, pvalue)
+  ) #%>%
+  #mutate(gene_sig = case_when(
+  #  pvalue_geo < 0.05 & pvalue_gse < 0.05 ~ paste0(gene, "**"),
+  #  pvalue_geo < 0.05 ~ paste0(gene, "*"),
+  #  pvalue_gse < 0.05 ~ paste0(gene, "^"),
+  #  TRUE ~ gene
+  #)) %>%
+  #select(-c(pvalue_geo, pvalue_gse, gene)) %>%
+  #column_to_rownames(var = "gene_sig")
+
+
+# I am excluding the pvalue columns as all of these genes have a adjusted sig p value
+combined_df <- rbind(excitatory_neurons_group_6mAD_vs_6mWT_sig_genes,
+                     excitatory_neurons_group_12mAD_vs_12mWT_sig_genes,
+                     inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes,
+                     inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes) %>%
+  select(gene, log2FoldChange, time_point, receiver) %>%
+  pivot_wider(
+    id_cols = gene,
+    names_from = c(time_point, receiver),
+    values_from = log2FoldChange
+  ) %>%
+  column_to_rownames(var = "gene")
+
+
+# Prepare heatmap annotation
+meta <- as.data.frame(colnames(combined_df))
+rownames(meta) <- meta$`colnames(combined_df)`
+
+receiver <- c("excitatory_neurons", "excitatory_neurons", "inhibitory_neurons", "inhibitory_neurons")
+time_point <- c("6m", "12m", "6m", "12m")
+
+meta$time_point <- time_point
+meta$receiver <- receiver
+
+meta <- meta[, 2:3]
+
+
+anno_cols <- list(
+  "receiver" = c(
+    "excitatory_neurons" = "grey75",
+    "inhibitory_neurons" = "grey36"
+  ),
+  "time_point" = c(
+    "6m" = "lavender",
+    "12m" = "purple"
+  )
+)
+
+# Generate annotation
+anno <- HeatmapAnnotation(
+  df = meta,
+  show_annotation_name = FALSE,
+  col = anno_cols#,
+  #annotation_legend_param = list(
+  #  dataset = list(
+  #    title = "Receiver",
+  #    direction = "horizontal",
+  #    #labels = c("Morabito", "Lau"),
+  #    labels_gp = gpar(fontface = "bold")
+  #  )
+  )
+#)
+
+# Convert df to matrix
+mat <- as.matrix(combined_df)
+
+# Set heatmap colors
+cols <- colorRamp2(c(-0.5, 0, 0.5), rev(brewer.pal(n = 3, name = "RdBu")))
+
+# Plot heatmap
+gex_heatmap <- Heatmap(mat,
+  col = cols,
+  top_annotation = anno,
+  show_column_names = FALSE,
+  show_row_dend = TRUE,
+  show_column_dend = FALSE,
+  cluster_columns = TRUE,
+  cluster_rows = TRUE,
+  row_title = "Signaling Mediators",
+  row_title_gp = gpar(fontface = "bold", fontsize = 12),
+  #row_names_gp = gpar(col = row_colors, fontface = "bold"),
+  heatmap_legend_param = list(
+    direction = "horizontal",
+    title = "Differential Expression",
+    labels_gp = gpar(fontface = "bold")
+  )
+)
+```
+
+
+
+
+
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "figures",
+  "figure_4.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "figures",
+  "figure_4.Rmd"
+))
+```
