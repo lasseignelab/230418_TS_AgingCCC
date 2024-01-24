@@ -167,7 +167,7 @@ barplot_shared <- ggplot(
   )
 ) +
   geom_bar(stat = "identity", width = 0.7) +
-  scale_fill_distiller(palette = "Greens") +
+  scale_fill_distiller(palette = "Greens", limits = c(0, 0.05), breaks = c(0, 0.03, 0.05)) +
   labs(x = "Functional Enrichment Terms", y = "Recall", fill = "adj p-value") +
   ggtitle("Top Enriched Terms for Shared Target Genes") +
   coord_flip() +
@@ -246,8 +246,8 @@ bubbleplot_6m_unique <- ggplot(
 ) +
   geom_point(alpha = 0.7, shape = 21) +
   scale_size(range = c(2, 10), name = "Recall") +
-  scale_fill_distiller(palette = "Greens") +
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  scale_fill_distiller(palette = "Greens", limits = c(0, 0.05), breaks = c(0, 0.03, 0.05)) +
+  labs(x = "Condition", y = "Functional Enrichment Terms", fill = "adj p-value") +
   theme_minimal() +
   ggtitle("Top Enriched Terms for Target\nGenes at 6-month time point") +
   theme_minimal() +
@@ -302,8 +302,8 @@ bubbleplot_12m_unique <- ggplot(
 ) +
   geom_point(alpha = 0.7, shape = 21) +
   scale_size(range = c(2, 10), name = "Recall") +
-  scale_fill_distiller(palette = "Greens") +
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  scale_fill_distiller(palette = "Greens", limits = c(0, 0.05), breaks = c(0, 0.03, 0.05)) +
+  labs(x = "Condition", y = "Functional Enrichment Terms", fill = "adj p-value") +
   theme_minimal() +
   ggtitle("Top Enriched Terms for Target\nGenes at 12-month time point") +
   theme_minimal() +
