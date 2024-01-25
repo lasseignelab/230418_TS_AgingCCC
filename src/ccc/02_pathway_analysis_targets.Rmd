@@ -84,6 +84,22 @@ prior_filt <- prior %>%
   select("id_target", "sender", "target", "group")
 ```
 
+# Compile background genes
+* We are including our custom background gene set for our FEA analysis:
+  * Included are all genes expressed in receivers that could have been potential target genes
+  * This include genes that are not significantly differentially expressed and genes in our query
+```{r}
+# access list of all possible target genes in MultiNicheNet output
+all_genes_df <- output$celltype_de
+
+# grab list of targets
+all_genes <- all_genes_df %>%
+  filter(cluster_id %in% c("Excitatory.Neurons", "Inhibitory.Neurons")) %>%
+  select(gene) %>%
+  unique() %>%
+  pull(gene)
+```
+
 # FEA: Shared genes
 * Shared = genes shared between the 6- and 12-month time points within the same condition
 * The fea function is a wrapper for code adapted from Elizabeth J. Wilk
@@ -118,7 +134,10 @@ shared_ad <- shared_filt %>%
   select(target) %>%
   as.list()
 
-fea_res_ad <- fea(shared_ad$target)
+fea_res_ad <- fea(shared_ad$target,
+  bg_genes = all_genes
+) %>%
+  mutate(condition = "AD")
 
 # Filter for WT-specific genes and perform FEA
 shared_wt <- shared_filt %>%
@@ -126,53 +145,52 @@ shared_wt <- shared_filt %>%
   select(target) %>%
   as.list()
 
-fea_res_wt <- fea(shared_wt$target)
-
-# Adding condition information before combining FEA outputs for plotting
-fea_res_ad_shared <- fea_res_ad %>%
-  mutate(condition = "AD")
-
-fea_res_wt_shared <- fea_res_wt %>%
+fea_res_wt <- fea(shared_wt$target,
+  bg_genes = all_genes
+) %>%
   mutate(condition = "WT")
 
-fea_res_shared <- rbind(fea_res_ad_shared, fea_res_wt_shared)
+# combine for plotting purposes
+fea_res_shared <- rbind(fea_res_ad, fea_res_wt) # no terms for WT
 ```
 
 # Plotting shared pathways
+* This only includes pathways in AD, as WT had no terms returned to its query
+  * The query was very small, so this is not surprising
 ```{r}
-bubbleplot_shared <- ggplot(
+barplot_shared <- ggplot(
   fea_res_shared,
   aes(
-    x = condition,
-    y = reorder(term_name, -p_value),
-    size = recall,
+    y = recall,
+    x = reorder(term_name, p_value),
     fill = p_value
   )
 ) +
-  geom_point(alpha = 0.7, shape = 21) +
-  scale_size(range = c(2, 10), name = "Recall") +
-  scale_fill_distiller(palette = "Greens") +
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
-  ggtitle("Top Enriched Terms for Target\nGenes Shared Across Timepoints") +
+  geom_bar(stat = "identity", width = 0.7) +
+  scale_fill_distiller(palette = "Greens", limits = c(0, 0.05), breaks = c(0, 0.03, 0.05)) +
+  labs(x = "Functional Enrichment Terms", y = "Recall", fill = "adj p-value") +
+  ggtitle("Top Enriched Terms for Shared Target Genes") +
+  coord_flip() +
   theme_minimal() +
   theme(
-    axis.text = element_text(face = "bold"),
-    text = element_text(face = "bold")
+    axis.text = element_text(face = "bold", color = "black", size = 10),
+    text = element_text(face = "bold"),
+    axis.title = element_text(face = "bold", size = 12)
   )
 
-bubbleplot_shared
+barplot_shared
 
 ggsave(
   here(
     "results",
     "intermediate_outputs",
     "04_ccc",
-    "fea_shared_bubbleplot.png"
+    "fea_shared_ad_barplot.png"
   ),
-  bubbleplot_shared,
+  barplot_shared,
   dpi = 400,
-  width = 8,
-  height = 7,
+  width = 10,
+  height = 5,
   bg = "#ffffff"
 )
 ```
@@ -202,10 +220,14 @@ targets_12m_wt <- prior_filt %>%
 # FEA: Unique genes - 6-month
 ```{r}
 # FEA on 6m unique genes by condition, then combine for plotting
-fea_res_6m_ad_unique <- fea(targets_6m_ad$target) %>%
+fea_res_6m_ad_unique <- fea(targets_6m_ad$target,
+  bg_genes = all_genes
+) %>%
   mutate(condition = "AD")
 
-fea_res_6m_wt_unique <- fea(targets_6m_wt$target) %>%
+fea_res_6m_wt_unique <- fea(targets_6m_wt$target,
+  bg_genes = all_genes
+) %>%
   mutate(condition = "WT")
 
 fea_res_6m <- rbind(fea_res_6m_ad_unique, fea_res_6m_wt_unique)
@@ -217,15 +239,15 @@ bubbleplot_6m_unique <- ggplot(
   fea_res_6m,
   aes(
     x = condition,
-    y = reorder(term_name, -p_value),
+    y = reorder(term_name, p_value),
     size = recall,
     fill = p_value
   )
 ) +
   geom_point(alpha = 0.7, shape = 21) +
   scale_size(range = c(2, 10), name = "Recall") +
-  scale_fill_distiller(palette = "Greens") +
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  scale_fill_distiller(palette = "Greens", limits = c(0, 0.05), breaks = c(0, 0.03, 0.05)) +
+  labs(x = "Condition", y = "Functional Enrichment Terms", fill = "adj p-value") +
   theme_minimal() +
   ggtitle("Top Enriched Terms for Target\nGenes at 6-month time point") +
   theme_minimal() +
@@ -254,10 +276,14 @@ ggsave(
 # FEA: Unique genes - 12-month
 ```{r}
 # FEA on 12m unique genes by condition, then combine for plotting
-fea_res_12m_ad_unique <- fea(targets_12m_ad$target) %>%
+fea_res_12m_ad_unique <- fea(targets_12m_ad$target,
+  bg_genes = all_genes
+) %>%
   mutate(condition = "AD")
 
-fea_res_12m_wt_unique <- fea(targets_12m_wt$target) %>%
+fea_res_12m_wt_unique <- fea(targets_12m_wt$target,
+  bg_genes = all_genes
+) %>%
   mutate(condition = "WT")
 
 fea_res_12m <- rbind(fea_res_12m_ad_unique, fea_res_12m_wt_unique)
@@ -269,15 +295,15 @@ bubbleplot_12m_unique <- ggplot(
   fea_res_12m,
   aes(
     x = condition,
-    y = reorder(term_name, -p_value),
+    y = reorder(term_name, p_value),
     size = recall,
     fill = p_value
   )
 ) +
   geom_point(alpha = 0.7, shape = 21) +
   scale_size(range = c(2, 10), name = "Recall") +
-  scale_fill_distiller(palette = "Greens") +
-  labs(x = "Condition", y = "Functional Enrichment Terms") +
+  scale_fill_distiller(palette = "Greens", limits = c(0, 0.05), breaks = c(0, 0.03, 0.05)) +
+  labs(x = "Condition", y = "Functional Enrichment Terms", fill = "adj p-value") +
   theme_minimal() +
   ggtitle("Top Enriched Terms for Target\nGenes at 12-month time point") +
   theme_minimal() +
@@ -297,7 +323,7 @@ ggsave(
   ),
   bubbleplot_12m_unique,
   dpi = 400,
-  width = 8,
+  width = 13,
   height = 7,
   bg = "#ffffff"
 )
