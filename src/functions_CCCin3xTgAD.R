@@ -655,9 +655,9 @@ jaccard <- function(a, b) {
   return (intersection/union)
 }
 
-## calculate_jaccard
+## calculate_jaccard_senders
 # a wrapper for code written by Vishal H. Oza. I modified his code for my own usage.
-calculate_jaccard <- function(df, senders, receivers, type) {
+calculate_jaccard_senders <- function(df, senders, receivers, type) {
   if(type == "ligands") {
     # empty list
     jaccard_results <- list()
@@ -724,9 +724,9 @@ calculate_jaccard <- function(df, senders, receivers, type) {
   return(jaccard_results)
 }
 
-## calculate_jaccard2
+## calculate_jaccard_receivers
 # Modified wrapper of calculate_jaccard wrapper. Original code adapted from Vishal H. Oza
-calculate_jaccard2 <- function(df, senders, receivers, type) {
+calculate_jaccard_receivers <- function(df, senders, receivers, type) {
   jaccard_results <- list()
   
   for (i in senders) {
