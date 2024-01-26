@@ -54,7 +54,10 @@ output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
 ```
 
 # Set Filtering Criteria
-* These are the same as previously
+* These are the same as previously:
+  * Senders and receivers of interest
+  * Top number of predicted targets for predicted interactions
+  * Groups of interest (condition/time point combinations)
 ```{r}
 # number of targets
 top_n_target <- 250
@@ -68,32 +71,16 @@ contrast_tbl <- tibble(
 # set receiver and sender cell types of interest
 receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
 sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# set groups
+group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
 ```
 
 # Filter MultiNicheNet output
-* Filter by ligand actvity and regulatory potential (person and spearman correlation coefficients)
+* Filter by ligand activity and regulatory potential (Pearson and Spearman correlation coefficients)
 ```{r warning=FALSE}
-# filter for AD
-group_oi <- "X6mAD"
-lrt_cor_filtered_1 <- filter_nichenet(output) # 225
-
-group_oi <- "X12mAD"
-lrt_cor_filtered_2 <- filter_nichenet(output) # 1788
-
-# filter for WT
-group_oi <- "X6mWT"
-lrt_cor_filtered_3 <- filter_nichenet(output) # 110
-
-group_oi <- "X12mWT"
-lrt_cor_filtered_4 <- filter_nichenet(output) # 479
-
-# combine AD and WT, irrespective of time point
-lrt_cor_filtered <- rbind(
-  lrt_cor_filtered_1,
-  lrt_cor_filtered_2,
-  lrt_cor_filtered_3,
-  lrt_cor_filtered_4
-) # 2602
+# filter output
+lrt_cor_filtered <- filter_nichenet(output)
 
 # Rename receiver cell types
 lrt_cor_filtered$receiver <- ifelse(
@@ -112,21 +99,21 @@ table(lrt_cor_filtered$receiver) # Ex 607 In 1995
 receivers_oi <- c("Excitatory Neurons", "Inhibitory Neurons")
 
 # ligands
-jaccard_results_ligands <- calculate_jaccard(lrt_cor_filtered,
+jaccard_results_ligands <- calculate_jaccard_senders(lrt_cor_filtered,
   senders = sender_oi,
   receivers = receivers_oi,
   type = "ligands"
 )
 
 # receptors
-jaccard_results_receptors <- calculate_jaccard(lrt_cor_filtered,
+jaccard_results_receptors <- calculate_jaccard_senders(lrt_cor_filtered,
   senders = sender_oi,
   receivers = receivers_oi,
   type = "receptors"
 )
 
 # targets
-jaccard_results_targets <- calculate_jaccard(lrt_cor_filtered,
+jaccard_results_targets <- calculate_jaccard_senders(lrt_cor_filtered,
   senders = sender_oi,
   receivers = receivers_oi,
   type = "targets"
@@ -135,13 +122,13 @@ jaccard_results_targets <- calculate_jaccard(lrt_cor_filtered,
 
 # Calculate JI (Between receivers)
 ```{r warning=FALSE}
-jaccard_receptors_receiver <- calculate_jaccard2(lrt_cor_filtered,
+jaccard_receptors_receiver <- calculate_jaccard_receivers(lrt_cor_filtered,
   senders = sender_oi,
   receivers = receivers_oi,
   type = "receptor"
 )
 
-jaccard_targets_receiver <- calculate_jaccard2(lrt_cor_filtered,
+jaccard_targets_receiver <- calculate_jaccard_receivers(lrt_cor_filtered,
   senders = sender_oi,
   receivers = receivers_oi,
   type = "target"
