@@ -1,0 +1,19 @@
+STANDARD_NAME	HP_ALZHEIMER_DISEASE
+SYSTEMATIC_NAME	M35868
+COLLECTION	C5:HPO
+MSIGDB_URL	https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/HP_ALZHEIMER_DISEASE
+NAMESPACE	Human_NCBI_Gene_ID
+DESCRIPTION_BRIEF	Alzheimer disease
+DESCRIPTION_FULL	A degenerative disease of the brain characterized by the insidious onset of dementia. Impairment of memory, judgment, attention span, and problem solving skills are followed by severe apraxia and a global loss of cognitive abilities. The condition primarily occurs after age 60, and is marked pathologically by severe cortical atrophy and the triad of senile plaques, neurofibrillary tangles, and neuropil threads. [https://orcid.org/0000-0002-0736-9199]
+PMID	
+GEOID	
+AUTHORS	
+CONTRIBUTOR	Human Phenotype Ontology Group
+CONTRIBUTOR_ORG	The Jackson Laboratory (JAX)
+EXACT_SOURCE	HP:0002511
+FILTERED_BY_SIMILARITY	
+EXTERNAL_NAMES_FOR_SIMILAR_TERMS	
+EXTERNAL_DETAILS_URL	https://hpo.jax.org/app/browse/term/HP:0002511
+SOURCE_MEMBERS	10347,2623,348,351,4353,4846,5328,5663,5664,8913
+GENE_SYMBOLS	ABCA7,GATA1,APOE,APP,MPO,NOS3,PLAU,PSEN1,PSEN2,CACNA1G
+FOUNDER_NAMES	

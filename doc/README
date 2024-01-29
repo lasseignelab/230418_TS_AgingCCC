@@ -1,1 +1,12 @@
-add any documentation, images, etc. related to your project here
+Documents:
+
+HP_ALZHEIMER_DISEASE.v2023.2.Hs.tsv
+- Downloaded from msigdb (https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/HP_ALZHEIMER_DISEASE.html)
+- Accessed on 240126
+
+KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv
+- Downloaded from msigdb (https://www.gsea-msigdb.org/gsea/msigdb/human/geneset/KEGG_ALZHEIMERS_DISEASE.html)
+- Accessed on 240126
+
+ad_gene_list.csv
+- Compiled from tables 1 & 2 in Bellenguez et. al, 2022 (doi: https://doi.org/10.1038/s41588-022-01024-z)
