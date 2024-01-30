@@ -771,7 +771,8 @@ filter_dea <- function(filt_mnn_df, dea_df, receiver_oi, timepoint_oi) {
   target_gex <- dea_df %>%
     filter(gene %in% targets$target) %>%
     select(gene, log2FoldChange, pvalue, padj) %>%
-    mutate(receiver = receiver_oi)
+    mutate(receiver = receiver_oi) %>%
+    mutate(timepoint = timepoint_oi)
   # return filtered dea ----------
   return(target_gex)
 }
