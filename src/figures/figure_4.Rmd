@@ -40,9 +40,10 @@ __Analysis Plan__:
   * FEA gprofiler2 outputs
 * Save Table S3
 * Plot individual panels:
-  * A: Volcano plot of gex of all targets (across time points and conditions)
-  * B: Bubble plot for 6-month FEA
-  * C: Bubble plot for 12-month FEA
+  * A: Volcano plot of gex of targets in 6m mice
+  * B: Volcano plot of gex of targets in 12m mice
+  * C: Bubble plot for 6-month FEA
+  * D: Bubble plot for 12-month FEA
 * Compile figure
 * Save figure
 
@@ -78,7 +79,7 @@ output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
 ```
 
 ## Load DESeq2 outputs
-```{r}
+```{r message=FALSE}
 # excitatory neurons
 ex_6m_ad_all <- read_csv(here(
   "results",
@@ -204,10 +205,10 @@ WriteXLS(
 )
 ```
 
-# Figure 4A
-* Volcano plot of all targets GEX
-* In order to color the volcano plot differently, we added gex information"
-  * NS/DE: Genes that are not differentially expressed (DE), majority are also not significant (NS)
+# Prepare df for plotting
+* Volcano plots of all targets GEX
+* In order to color the volcano plots differently, we added gex information:
+  * NS/DE: Genes that are not differentially expressed (DE), most are also not significant (NS)
     * log2FoldChange between -0.2 and 0.2, padj > 0.05 for majority
   * NS up: Genes that are DE (upregulated), but NS according to multiple hypothesis correction
     * log2FoldChange > 0.2, padj > 0.05
@@ -235,12 +236,23 @@ all_gex$diffexpressed[all_gex$log2FoldChange < -0.2 &
 
 # add labels to significantly DE genes
 all_gex$delabel <- NA
-all_gex$delabel[all_gex$diffexpressed != "NS/DE"] <-
-  all_gex$gene[all_gex$diffexpressed != "NS/DE"]
+
+all_gex$delabel[all_gex$diffexpressed == "Significantly up"] <-
+  all_gex$gene[all_gex$diffexpressed == "Significantly up"]
+
+all_gex$delabel[all_gex$diffexpressed == "Significantly down"] <-
+  all_gex$gene[all_gex$diffexpressed == "Significantly down"]
+```
+
+# Figure 4A
+* Volcano plot of 6m targets
+```{r}
+gex_6m <- all_gex %>%
+  filter(timepoint == "6m")
 
 # plot volcano plot
-volcano <- ggplot(
-  all_gex,
+volcano_6m <- ggplot(
+  gex_6m,
   aes(
     x = log2FoldChange,
     y = -log10(padj),
@@ -248,7 +260,7 @@ volcano <- ggplot(
     label = delabel
   )
 ) +
-  geom_point() +
+  geom_point(aes(shape = receiver), size = 2) +
   theme_bw() +
   geom_text_repel() +
   scale_color_manual(values = c(
@@ -258,6 +270,10 @@ volcano <- ggplot(
     "darkblue",
     "darkred"
   )) +
+  scale_shape_manual(
+    values = c(17, 19),
+    labels = c("Excitatory Neurons", "Inhibitory Neurons")
+  ) +
   geom_vline(
     xintercept = c(-0.2, 0.2),
     col = "black",
@@ -268,20 +284,26 @@ volcano <- ggplot(
     col = "black",
     linetype = "dotted"
   ) +
+  xlim(-4, 4) +
+  ylim(0, 15) +
   labs(
-    x = "Differential Expression (log2FoldChange)",
+    x = "log2FoldChange",
     y = "Adjusted p-value (-log10)",
     color = "Target Gene Expression"
   ) +
-  guides(color = guide_legend(override.aes = list(shape = 19, size = 3))) +
+  guides(
+    color = guide_legend(override.aes = list(shape = 19, size = 3)),
+    shape = guide_legend("Receiver")
+  ) +
   theme(
     axis.text = element_text(face = "bold", color = "black", size = 10),
     axis.title = element_text(face = "bold", color = "black", size = 12),
     legend.title = element_text(face = "bold", size = 12),
     legend.text = element_text(face = "bold", size = 10)
-  )
+  ) +
+  coord_flip()
 
-volcano
+volcano_6m
 
 # save volcano plot
 ggsave(
@@ -289,9 +311,9 @@ ggsave(
     "results",
     "final_outputs",
     "04_dea",
-    "volcano_all_targets.png"
+    "volcano_6m_targets.png"
   ),
-  volcano,
+  volcano_6m,
   dpi = 400,
   width = 9,
   height = 5,
@@ -300,6 +322,82 @@ ggsave(
 ```
 
 # Figure 4B
+* Volcano plot of 12m targets
+```{r}
+gex_12m <- all_gex %>%
+  filter(timepoint == "12m")
+
+# plot volcano plot
+volcano_12m <- ggplot(
+  gex_12m,
+  aes(
+    x = log2FoldChange,
+    y = -log10(padj),
+    col = diffexpressed,
+    label = delabel
+  )
+) +
+  geom_point(aes(shape = receiver), size = 2) +
+  theme_bw() +
+  geom_text_repel() +
+  scale_color_manual(values = c(
+    "lightblue",
+    "tomato",
+    "grey",
+    "darkblue",
+    "darkred"
+  )) +
+  scale_shape_manual(
+    values = c(17, 19),
+    labels = c("Excitatory Neurons", "Inhibitory Neurons")
+  ) +
+  geom_vline(
+    xintercept = c(-0.2, 0.2),
+    col = "black",
+    linetype = "dotted"
+  ) +
+  geom_hline(
+    yintercept = -log10(0.05),
+    col = "black",
+    linetype = "dotted"
+  ) +
+  xlim(-4, 4) +
+  labs(
+    x = "log2FoldChange",
+    y = "Adjusted p-value (-log10)",
+    color = "Target Gene Expression"
+  ) +
+  guides(
+    color = guide_legend(override.aes = list(shape = 19, size = 3)),
+    shape = guide_legend("Receiver")
+  ) +
+  theme(
+    axis.text = element_text(face = "bold", color = "black", size = 10),
+    axis.title = element_text(face = "bold", color = "black", size = 12),
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(face = "bold", size = 10)
+  ) +
+  coord_flip()
+
+volcano_12m
+
+# save volcano plot
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "04_dea",
+    "volcano_12m_targets.png"
+  ),
+  volcano_12m,
+  dpi = 400,
+  width = 9,
+  height = 5,
+  bg = "#ffffff"
+)
+```
+
+# Figure 4C
 * Bubbleplot of 6m targets' FEA
 ```{r}
 bubbleplot_6m <- ggplot(
@@ -327,7 +425,8 @@ bubbleplot_6m <- ggplot(
   theme(
     axis.text = element_text(face = "bold", color = "black", size = 10),
     text = element_text(face = "bold", size = 12),
-    axis.text.x = element_text(angle = 0, hjust = 0.5)
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.box = "horizontal"
   ) +
   scale_y_discrete(labels = wrap_format(15)) +
   coord_flip()
@@ -335,11 +434,17 @@ bubbleplot_6m <- ggplot(
 bubbleplot_6m
 ```
 
-# Figure 4C
+# Figure 4D
 * Bubbleplot of 12m targets' FEA
 ```{r}
+# filter FEA further for plotting purposes
+fea_res_12m_filt <- fea_res_12m %>%
+  group_by(condition) %>%
+  top_n(recall, n = 10)
+
+# plot bubble plot
 bubbleplot_12m <- ggplot(
-  fea_res_12m,
+  fea_res_12m_filt,
   aes(
     x = condition,
     y = reorder(term_name, p_value),
@@ -370,22 +475,25 @@ bubbleplot_12m
 ```
 
 # Compile Figure 4
-* Compiling figure by the left (volcano and 6m FEA) and right (12m FEA) plots
+* Compiling figure by the left (volcano for 6 and 12m and 6m FEA) and right (12m FEA) plots
 ```{r}
-left <- ggarrange(volcano,
+left <- ggarrange(
+  volcano_6m,
+  volcano_12m,
   bubbleplot_6m,
-  nrow = 2,
-  labels = c("A", "B"),
-  align = "v",
-  heights = c(1.5, 1)
+  nrow = 3,
+  labels = c("A", "B", "C"),
+  align = "v"
 )
 
-right <- ggarrange(bubbleplot_12m,
-  labels = "C"
+right <- ggarrange(
+  bubbleplot_12m,
+  labels = "D"
 )
 
 # compile final figure
-fig4 <- ggarrange(left,
+fig4 <- ggarrange(
+  left,
   right,
   ncol = 2
 )
@@ -403,10 +511,10 @@ ggsave(
     "01_figures",
     "figure4.png"
   ),
-  figv2,
-  dpi = 400,
-  width = 16,
-  height = 9,
+  fig4,
+  dpi = 300,
+  width = 15,
+  height = 10,
   bg = "#ffffff"
 )
 ```
@@ -439,40 +547,23 @@ other attached packages:
 [16] tidyr_1.3.0     tibble_3.2.1    ggplot2_3.4.2   tidyverse_2.0.0
 
 loaded via a namespace (and not attached):
-  [1] colorspace_2.1-0            ggsignif_0.6.4              rprojroot_2.0.3            
-  [4] scuttle_1.8.4               XVector_0.38.0              GenomicRanges_1.50.2       
-  [7] rstudioapi_0.14             farver_2.1.1                remotes_2.4.2              
- [10] bit64_4.0.5                 fansi_1.0.4                 xml2_1.3.3                 
- [13] codetools_0.2-19            R.methodsS3_1.8.2           sparseMatrixStats_1.10.0   
- [16] knitr_1.42                  broom_1.0.4                 R.oo_1.25.0                
- [19] HDF5Array_1.26.0            compiler_4.2.3              dqrng_0.3.0                
- [22] backports_1.4.1             Matrix_1.5-4                fastmap_1.1.1              
- [25] lazyeval_0.2.2              limma_3.54.2                cli_3.6.1                  
- [28] htmltools_0.5.5             tools_4.2.3                 gtable_0.3.3               
- [31] glue_1.6.2                  GenomeInfoDbData_1.2.9      Rcpp_1.0.10                
- [34] carData_3.0-5               Biobase_2.58.0              vctrs_0.6.2                
- [37] rhdf5filters_1.10.1         DelayedMatrixStats_1.20.0   xfun_0.38                  
- [40] ps_1.7.5                    beachmat_2.14.2             timechange_0.2.0           
- [43] lifecycle_1.0.3             rstatix_0.7.2               edgeR_3.40.2               
- [46] zlibbioc_1.44.0             vroom_1.6.1                 ragg_1.2.5                 
- [49] hms_1.1.3                   MatrixGenerics_1.10.0       rex_1.2.1                  
- [52] parallel_4.2.3              SummarizedExperiment_1.28.0 rhdf5_2.42.1               
- [55] RColorBrewer_1.1-3          yaml_2.3.7                  SingleCellExperiment_1.20.1
- [58] stringi_1.7.12              S4Vectors_0.36.2            desc_1.4.2                 
- [61] BiocGenerics_0.44.0         cyclocomp_1.1.0             BiocParallel_1.32.6        
- [64] GenomeInfoDb_1.34.9         systemfonts_1.0.4           rlang_1.1.0                
- [67] pkgconfig_2.0.3             matrixStats_0.63.0          bitops_1.0-7               
- [70] evaluate_0.20               lattice_0.21-8              Rhdf5lib_1.20.0            
- [73] labeling_0.4.2              bit_4.0.5                   processx_3.8.1             
- [76] tidyselect_1.2.0            plyr_1.8.8                  magrittr_2.0.3             
- [79] R6_2.5.1                    IRanges_2.32.0              generics_0.1.3             
- [82] DelayedArray_0.24.0         pillar_1.9.0                withr_2.5.0                
- [85] abind_1.4-5                 RCurl_1.98-1.12             crayon_1.5.2               
- [88] car_3.1-2                   DropletUtils_1.18.1         utf8_1.2.3                 
- [91] tzdb_0.3.0                  rmarkdown_2.21              locfit_1.5-9.7             
- [94] grid_4.2.3                  callr_3.7.3                 digest_0.6.31              
- [97] R.cache_0.16.0              textshaping_0.3.6           R.utils_2.12.2             
-[100] stats4_4.2.3                munsell_0.5.0 
+ [1] bit64_4.0.5        vroom_1.6.1        carData_3.0-5      R.utils_2.12.2    
+ [5] yaml_2.3.7         remotes_2.4.2      pillar_1.9.0       backports_1.4.1   
+ [9] glue_1.6.2         digest_0.6.31      RColorBrewer_1.1-3 ggsignif_0.6.4    
+[13] colorspace_2.1-0   htmltools_0.5.5    R.oo_1.25.0        pkgconfig_2.0.3   
+[17] broom_1.0.4        processx_3.8.1     tzdb_0.3.0         timechange_0.2.0  
+[21] generics_0.1.3     farver_2.1.1       car_3.1-2          withr_2.5.0       
+[25] lazyeval_0.2.2     cli_3.6.1          magrittr_2.0.3     crayon_1.5.2      
+[29] evaluate_0.20      ps_1.7.5           R.methodsS3_1.8.2  fansi_1.0.4       
+[33] R.cache_0.16.0     rstatix_0.7.2      xml2_1.3.3         textshaping_0.3.6 
+[37] tools_4.2.3        hms_1.1.3          cyclocomp_1.1.0    lifecycle_1.0.3   
+[41] munsell_0.5.0      callr_3.7.3        rex_1.2.1          compiler_4.2.3    
+[45] systemfonts_1.0.4  rlang_1.1.0        grid_4.2.3         rstudioapi_0.14   
+[49] labeling_0.4.2     rmarkdown_2.21     gtable_0.3.3       abind_1.4-5       
+[53] R6_2.5.1           knitr_1.42         fastmap_1.1.1      bit_4.0.5         
+[57] utf8_1.2.3         rprojroot_2.0.3    ragg_1.2.5         desc_1.4.2        
+[61] stringi_1.7.12     parallel_4.2.3     Rcpp_1.0.10        vctrs_0.6.2       
+[65] tidyselect_1.2.0   xfun_0.38  
 
 # Time tracking
 ```{r}
