@@ -1,0 +1,286 @@
+---
+title: "figure_S4"
+author: "Tabea M. Soelter"
+date: "2024-02-01"
+output: html_document
+---
+**Plotting Supplementary Manuscript Figure 4**
+
+__Goal__: This is a script for generating supp figure 4 of my manuscript, which includes an alluvial plot of the LRTs that have DE AD gene as a target.
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+    * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__: 
+*MultiNicheNet object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+*Filtered DESeq2 output*
+* Name: filtered_dea_targets.rds
+* Location: results/final_outputs/04_dea/
+*Converted AD gene list*
+* Name: ad_genes_mm.rds
+* Location: doc/
+
+__Analysis Plan__:
+* Load necessary packages
+* Load data
+  * Load AD gene lists
+  * MultiNicheNet object
+  * Filtered DESeq2 output
+* Plot figure S4:
+  * Alluvial plot of LRTs that have a sig DE AD target gene
+* Save figure
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# set seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ggalluvial)
+  library(patchwork)
+  library(cowplot)
+  library(ggpubr)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Color palette
+```{r}
+colors <- c(
+  `Oligodendrocytes` = "royalblue3",
+  `Microglia` = "orchid3",
+  `OPCs` = "mediumpurple1",
+  `Astrocytes` = "cornflowerblue",
+  `Excitatory.Neurons` = "slateblue3",
+  `Inhibitory.Neurons` = "darkslategray3",
+  `Pericytes` = "deepskyblue3",
+  `Endothelial cells` = "darkolivegreen4",
+  `Meningeal cells` = "seagreen4",
+  `Ependymal cells` = "lightcoral",
+  `Fibroblasts` = "olivedrab3",
+  `RGCs` = "violetred2"
+)
+```
+
+# Load Data
+* MultiNicheNet output
+* AD gene list
+* Filtered DEA df
+```{r}
+# MultiNicheNet
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+
+# Mouse AD gene list
+ad_genes_mm <- readRDS(here("doc", "ad_genes_mm.rds"))
+
+# Target gene expression info from DESeq2
+all_gex <- readRDS(here(
+  "results",
+  "final_outputs",
+  "04_dea",
+  "filtered_dea_targets.rds"
+))
+```
+
+# Filter MultiNicheNet output
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# vector of groups of interest
+group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+
+# Filter output using above criteria and add time point column
+output_filt <- filter_nichenet(output)
+```
+
+# Filter DEA info by AD-associated genes
+```{r}
+targets_ad <- all_gex %>%
+  filter(gene %in% ad_genes_mm)
+
+# filter by significance
+sig_ad_targets <- targets_ad %>%
+  filter(padj < 0.05)
+```
+
+# Prepare df for plotting
+```{r}
+# Filter MultiNicheNet object by AD genes
+ad_lrt <- output_filt %>%
+  select(sender, receiver, ligand, receptor, target, group) %>%
+  filter(target %in% sig_ad_targets$gene) %>%
+  unique()
+
+# Factorize columns of interest (for plotting purposes)
+vec <- c("ligand", "receptor", "target")
+
+ad_lrt[vec] <- lapply(ad_lrt[vec], function(x) factor(x, levels = unique(x)))
+
+# Reorder columns of interest by the sender to aid with legibility
+ad_lrt$ligand <- reorder(
+  ad_lrt$ligand,
+  desc(ad_lrt$sender)
+)
+
+ad_lrt$receptor <- reorder(
+  ad_lrt$receptor,
+  desc(ad_lrt$sender)
+)
+
+ad_lrt$target <- reorder(
+  ad_lrt$target,
+  desc(ad_lrt$sender)
+)
+```
+
+# Plot figure S4
+```{r}
+lrt_alluvial <- ggplot(ad_lrt,
+  aes(axis1 = ligand, axis2 = receptor, axis3 = target),
+  label = stratum
+) +
+  xlab("Type") +
+  geom_alluvium() +
+  stat_alluvium(lode.guidance = "frontback") +
+  geom_stratum(aes(fill = sender)) +
+  geom_label(
+    stat = "stratum",
+    fill = "white",
+    aes(label = after_stat(stratum)),
+    size = 3,
+    fontface = "bold"
+  ) +
+  geom_flow(aes(fill = sender), stat = "alluvium", color = "black") +
+  scale_fill_manual(values = colors) +
+  scale_x_discrete(limits = c("Ligand", "Receptor", "Target")) +
+  theme_void() +
+  theme(
+    axis.text.x = element_text(vjust = 2, face = "bold", size = 12),
+    legend.position = "bottom",
+    plot.margin = margin(0, -2, 0, -2, "cm"),
+    legend.text = element_text(face = "bold", size = 12),
+    legend.title = element_text(face = "bold", size = 14)
+  ) +
+  guides(fill = guide_legend(title = "Sender"))
+
+lrt_alluvial
+```
+
+# Save figure S4
+```{r}
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "01_figures",
+    "supp_figure4.png"
+  ),
+  lrt_alluvial,
+  dpi = 300,
+  width = 10,
+  height = 10,
+  bg = "#ffffff"
+)
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C              
+ [3] LC_TIME=en_US.UTF-8        LC_COLLATE=en_US.UTF-8    
+ [5] LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                 
+ [9] LC_ADDRESS=C               LC_TELEPHONE=C            
+[11] LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2       styler_1.9.1      here_1.0.1        ggpubr_0.6.0     
+ [5] cowplot_1.1.1     patchwork_1.1.2   ggalluvial_0.12.5 lubridate_1.9.2  
+ [9] forcats_1.0.0     stringr_1.5.0     dplyr_1.1.1       purrr_1.0.1      
+[13] readr_2.1.4       tidyr_1.3.0       tibble_3.2.1      ggplot2_3.4.2    
+[17] tidyverse_2.0.0  
+
+loaded via a namespace (and not attached):
+ [1] carData_3.0-5     R.utils_2.12.2    diffobj_0.3.5     yaml_2.3.7       
+ [5] remotes_2.4.2     pillar_1.9.0      backports_1.4.1   glue_1.6.2       
+ [9] digest_0.6.31     ggsignif_0.6.4    colorspace_2.1-0  htmltools_0.5.5  
+[13] R.oo_1.25.0       WriteXLS_6.4.0    pkgconfig_2.0.3   broom_1.0.4      
+[17] scales_1.2.1      processx_3.8.1    tzdb_0.3.0        timechange_0.2.0 
+[21] generics_0.1.3    farver_2.1.1      car_3.1-2         withr_2.5.0      
+[25] lazyeval_0.2.2    cli_3.6.1         magrittr_2.0.3    crayon_1.5.2     
+[29] evaluate_0.20     ps_1.7.5          R.methodsS3_1.8.2 fansi_1.0.4      
+[33] R.cache_0.16.0    rstatix_0.7.2     xml2_1.3.3        textshaping_0.3.6
+[37] tools_4.2.3       hms_1.1.3         cyclocomp_1.1.0   lifecycle_1.0.3  
+[41] munsell_0.5.0     callr_3.7.3       rex_1.2.1         compiler_4.2.3   
+[45] systemfonts_1.0.4 rlang_1.1.0       grid_4.2.3        rstudioapi_0.14  
+[49] labeling_0.4.2    rmarkdown_2.21    waldo_0.4.0       gtable_0.3.3     
+[53] abind_1.4-5       rematch2_2.1.2    R6_2.5.1          knitr_1.42       
+[57] fastmap_1.1.1     utf8_1.2.3        rprojroot_2.0.3   ragg_1.2.5       
+[61] desc_1.4.2        stringi_1.7.12    vctrs_0.6.2       tidyselect_1.2.0 
+[65] xfun_0.38
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "figures",
+  "figure_S4.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "figures",
+  "figure_S4.Rmd"
+))
+```
