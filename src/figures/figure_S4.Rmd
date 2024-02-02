@@ -1,0 +1,172 @@
+---
+title: "figure_S4"
+author: "Tabea M. Soelter"
+date: "2024-02-01"
+output: html_document
+---
+# EDIT                    THIS
+**Plotting Manuscript Figure 5**
+
+__Goal__: This is a script for generating figure 5 of my manuscript. We are also saving supplementary table 4.
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+    * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__: 
+*MultiNicheNet object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+*DESeq2 outputs*
+* Names:
+    1. excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+    2. inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+    3. excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+    4. inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+* Location: results/intermediate_outputs/03_dea/
+*AD Gene Lists*
+* Names:
+    1. HP_ALZHEIMER_DISEASE.v2023.2.Hs.tsv
+    2. KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv
+    3. ad_gene_list.csv
+* Location: doc/
+
+__Analysis Plan__:
+* Load necessary packages
+* Load data
+  * Load AD gene lists
+  * MultiNicheNet object
+  * DESeq2 outputs
+* Filter all input data
+* Plot individual panels:
+
+# Edit this -----------
+
+  * A: Dotplot of targets that are AD genes gex in both receivers
+  * B: Alluvial plot of LRTs where targets are AD genes
+  * C: Alluvial plot of LRTs where LRs are AD genes
+* Compile figure
+* Save figure
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# set seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(readr)
+  library(gprofiler2)
+  library(ggalluvial)
+  library(ComplexHeatmap)
+  library(circlize)
+  library(RColorBrewer)
+  library(patchwork)
+  library(cowplot)
+  library(ggpubr)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+
+
+
+
+
+
+```{r}
+lrt <- ggplot(ad_lrt,
+  aes(axis1 = ligand, axis2 = receptor, axis3 = target),
+  label = stratum
+) +
+  xlab("Type") +
+  geom_alluvium() +
+  stat_alluvium(lode.guidance = "frontback") +
+  geom_stratum(aes(fill = sender)) +
+  geom_label(
+    stat = "stratum",
+    fill = "white",
+    aes(label = after_stat(stratum))
+  ) +
+  geom_flow(aes(fill = sender), stat = "alluvium", color = "black") +
+  scale_fill_manual(values = colors) +
+  geom_text(
+    stat = "stratum",
+    aes(label = after_stat(stratum)),
+    fontface = "bold"
+  ) +
+  scale_x_discrete(limits = c("Ligand", "Receptor", "Target")) +
+  theme_void() +
+  theme(
+    axis.text.x = element_text(vjust = 2, face = "bold", size = 12),
+    legend.position = "bottom",
+    #legend.margin = margin(0, 0, 0, 0),
+    plot.margin = unit(c(.2,.2,.2,0), "cm"),
+    legend.text = element_text(face = "bold", size = 12),
+    legend.title = element_text(face = "bold", size = 14)
+  ) +
+  guides(fill = guide_legend(title = "Sender"))
+
+lrt
+```
+
+
+# save figure S4
+```{r}
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "01_figures",
+    "supp_figure4.png"
+  ),
+  lrt,
+  dpi = 300,
+  width = 10,
+  height = 12,
+  bg = "#ffffff"
+)
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "figures",
+  "figure_S4.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "figures",
+  "figure_S4.Rmd"
+))
+```
