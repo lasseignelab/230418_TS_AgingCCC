@@ -199,7 +199,7 @@ ggsave(
     "results",
     "final_outputs",
     "01_figures",
-    "supp_figure4_v2.png"
+    "supp_figure4.png"
   ),
   lrt_alluvial,
   dpi = 300,
