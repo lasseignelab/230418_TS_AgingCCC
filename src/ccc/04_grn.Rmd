@@ -1,0 +1,280 @@
+---
+title: "04_grn"
+author: "Tabea M. Soelter"
+date: "2024-01-26"
+output: html_document
+---
+**Determining signaling mediators using gene regulatory networks from MultiNicheNet**
+
+__Goal__: To identify potential signaling mediators (receptor -> target gene) by determining direct neighbors of receptors and predicting the most likely mediator using Dijkstra's algorithm.
+  
+__Reproducibility__: 
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+  * Resources: long partition (150hrs), 6 CPUs, 65GB per CPU
+
+#__Data__: EDIT THIS
+*MultiNicheNet object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+ADD AD GENE LIST
+ 
+#__Analysis Plan__: EDIT THIS
+* Load necessary packages 
+* Load data
+* Filter MultiNicheNet output
+* Grab LRTs that are not AD-associated
+* Extract signaling GRNs from MultiNicheNet
+  * Plot and save
+* Create igraph objects for each LRT
+* Calculate network properties
+  * Receptor neighbors = all signaling mediators
+  * Shortest path = top mediator
+* Save outputs and objects
+  
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(multinichenetr)
+  library(nichenetr)
+  library(igraph)
+  library(tidyverse)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+```
+
+# NicheNet-v2 prior
+* downloaded here: https://zenodo.org/record/7074291
+* Accessed on 231211
+```{r}
+lr_network <- readRDS(here(
+  "data",
+  "ccc",
+  "nichenet_v2_prior",
+  "lr_network_mouse_21122021.rds"
+)) %>%
+  dplyr::rename(ligand = from, receptor = to) %>%
+  distinct(ligand, receptor) %>%
+  mutate(ligand = make.names(ligand), receptor = make.names(receptor))
+
+ligand_target_matrix <- readRDS(here(
+  "data",
+  "ccc",
+  "nichenet_v2_prior",
+  "ligand_target_matrix_nsga2r_final_mouse.rds"
+))
+
+# format row and column names
+colnames(ligand_target_matrix) <- colnames(ligand_target_matrix) %>%
+  make.names()
+rownames(ligand_target_matrix) <- rownames(ligand_target_matrix) %>%
+  make.names()
+```
+
+# MultiNicheNet GRN prior
+* All of the priors were downloaded from the MultiNicheNet zenodo, as described in the MultiNicheNet vignette (accesssed 231211).
+```{r}
+sig_network <- readRDS(
+  here(
+    "data",
+    "ccc",
+    "nichenet_v2_prior",
+    "signaling_network_mouse_21122021.rds"
+  )
+) %>%
+  mutate(
+    from = make.names(from),
+    to = make.names(to)
+  )
+
+gr_network <- readRDS(
+  here(
+    "data",
+    "ccc",
+    "nichenet_v2_prior",
+    "gr_network_mouse_21122021.rds"
+  )
+) %>%
+  mutate(
+    from = make.names(from),
+    to = make.names(to)
+  )
+
+ligand_tf_matrix <- readRDS(
+  here(
+    "data",
+    "ccc",
+    "nichenet_v2_prior",
+    "ligand_tf_matrix_nsga2r_final_mouse.rds"
+  )
+)
+colnames(ligand_tf_matrix) <- colnames(ligand_tf_matrix) %>%
+  make.names()
+rownames(ligand_tf_matrix) <- rownames(ligand_tf_matrix) %>%
+  make.names()
+
+weighted_networks <- readRDS(
+  here(
+    "data",
+    "ccc",
+    "nichenet_v2_prior",
+    "weighted_networks_nsga2r_final_mouse.rds"
+  )
+)
+weighted_networks$lr_sig <- weighted_networks$lr_sig %>%
+  mutate(
+    from = make.names(from),
+    to = make.names(to)
+  )
+weighted_networks$gr <- weighted_networks$gr %>%
+  mutate(
+    from = make.names(from),
+    to = make.names(to)
+  )
+```
+
+# Set MultiNicheNet filtering parameters
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# set groups to filter for (in this case all of them)
+group_oi <- c("X6mWT", "X6mAD", "X12mWT", "X12mAD")
+```
+
+# Filter MultiNicheNet outputs
+```{r}
+output_filt <- filter_nichenet(output)
+```
+
+# Get LRTs not AD-associated
+```{r}
+ccc_filt <- output_filt %>%
+  filter(!ligand %in% ad_genes_mm) %>%
+  filter(!receptor %in% ad_genes_mm) %>%
+  filter(!target %in% ad_genes_mm) %>%
+  select(sender, receiver, ligand, receptor, target, id_target) %>%
+  unique()
+```
+
+# Make igraph objects
+* I am also plotting all the sub-networks and saving to specified directory for each dataset
+```{r}
+igraph_objects_list <- signaling_igraph(
+  lrt_filtered_list = filtered_objects,
+  overlap = overlap,
+  ccc_combined = ccc_combined,
+  ligand_tf_matrix = ligand_tf_matrix,
+  weighted_networks = weighted_networks,
+  lr_network = lr_network,
+  sig_network = sig_network,
+  gr_network = gr_network,
+  plots = "results/intermediate_outputs/"
+)
+
+list2env(igraph_objects_list, globalenv())
+```
+
+# Calculate network properties
+* I calculated many network topology metrics, however the ones highlighted in the manuscript are:
+  * neighbors: all nodes directly connected to our receptor node. Must be outgoing from the receptor.
+  * shortest path: the path from receptor to target gene that is the shortest. This represents our top or most-likely mediator.
+  
+* NOTE: This chunk produces warnings due to missing information to calculate shortest path. That is expected.
+```{r include=FALSE}
+geo_network_proporties <- network_topology(geo_igraph_objects)
+
+gse_network_proporties <- network_topology(gse_igraph_objects)
+```
+
+# Save outputs
+```{r}
+saveRDS(geo_network_proporties, file = here(
+  "results",
+  "final_outputs",
+  "geo",
+  "signaling_grn_properties.rds"
+))
+
+saveRDS(gse_network_proporties, file = here(
+  "results",
+  "final_outputs",
+  "gse",
+  "signaling_grn_properties.rds"
+))
+```
+
+# Save igraph objects
+```{r}
+saveRDS(geo_igraph_objects, file = here(
+  "data",
+  "ccc",
+  "geo_signaling_igraph_objects.rds"
+))
+
+saveRDS(gse_igraph_objects, file = here(
+  "data",
+  "ccc",
+  "gse_signaling_igraph_objects.rds"
+))
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 15 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "ccc",
+  "04_grn.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "ccc",
+  "04_grn.Rmd"
+))
+```
