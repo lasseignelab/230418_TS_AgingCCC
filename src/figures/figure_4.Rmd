@@ -1,12 +1,12 @@
 ---
 title: "figure_4"
 author: "Tabea M. Soelter"
-date: "2024-01-21"
+date: "2024-01-28"
 output: html_document
 ---
-**Plotting Main Figure 4**
+**Plotting Manuscript Figure 4**
 
-__Goal__: This is a script for generating figure 4 of my manuscript.
+__Goal__: This is a script for generating figure 4 of my manuscript. I am also generating Table S3.
 
 __Reproducibility__:
 * GitHub: lasseignelab/230418_TS_AgingCCC
@@ -15,19 +15,35 @@ __Reproducibility__:
 * HPC: Yes
     * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
 
-#__Data__: EDIT THIS 
+__Data__:
 *MultiNicheNet object*
 * Name: multinichenet_output.rds
 * Location: data/ccc/
+*DESeq2 outputs*
+* Names:
+    1. excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+    2. inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+    3. excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+    4. inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+* Location: results/intermediate_outputs/03_dea/
+*FEA gprofiler2 outputs*
+* Names:
+    1. fea_res_6m.rds
+    2. fea_res_12m.rds
+* Location: results/intermediate_outputs/04_ccc/
 
-#__Analysis Plan__: EDIT THIS - maybe not condition for heatmap ... we will see
+__Analysis Plan__:
 * Load necessary packages
 * Load data
   * MultiNicheNet object
+  * DESeq2 outputs
+  * FEA gprofiler2 outputs
+* Save Table S3
 * Plot individual panels:
-  * A: Heatmap of pseudobulk expression annotated by receiver, condition, and time point
-  * B: Bubble plot for6-month FEA
-  * C: Bubble plot for 12-month FEA
+  * A: Volcano plot of gex of targets in 6m mice
+  * B: Volcano plot of gex of targets in 12m mice
+  * C: Bubble plot for 6-month FEA
+  * D: Bubble plot for 12-month FEA
 * Compile figure
 * Save figure
 
@@ -42,9 +58,9 @@ set.seed(42)
 # load packages
 suppressPackageStartupMessages({
   library(tidyverse)
-  library(ComplexHeatmap)
-  library(RColorBrewer)
-  library(circlize)
+  library(WriteXLS)
+  library(ggrepel)
+  library(scales)
   library(patchwork)
   library(cowplot)
   library(ggpubr)
@@ -56,147 +72,498 @@ suppressPackageStartupMessages({
 source(here("src", "functions_CCCin3xTgAD.R"))
 ```
 
-# Load data
-
--   DESeq2 inputs
-
-    -   inhibitory and excitatory neurons
-
+# Load Data
+## Load MultiNicheNet object
 ```{r}
-    excitatory_neurons_group_6mAD_vs_6mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/excitatory_neurons_group_6mAD_vs_6mWT_sig_genes.csv")
-
-    excitatory_neurons_group_12mAD_vs_12mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/excitatory_neurons_group_12mAD_vs_12mWT_sig_genes.csv")
-
-    # inhibitory neurons
-    inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes.csv")
-
-inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes <- read_csv("results/intermediate_outputs/03_dea/inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes.csv")
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
 ```
 
-# Prepare dfs
+## Load DESeq2 outputs
+```{r message=FALSE}
+# excitatory neurons
+ex_6m_ad_all <- read_csv(here(
+  "results",
+  "intermediate_outputs",
+  "03_dea",
+  "excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv"
+))
 
+ex_12m_ad_all <- read_csv(here(
+  "results",
+  "intermediate_outputs",
+  "03_dea",
+  "excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv"
+))
+
+# inhibitory neurons
+in_6m_ad_all <- read_csv(here(
+  "results",
+  "intermediate_outputs",
+  "03_dea",
+  "inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv"
+))
+
+in_12m_ad_all <- read_csv(here(
+  "results",
+  "intermediate_outputs",
+  "03_dea",
+  "inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv"
+))
+```
+
+## Load FEA outputs
 ```{r}
-# add time point information
-excitatory_neurons_group_6mAD_vs_6mWT_sig_genes$time_point <- "6m"
-excitatory_neurons_group_12mAD_vs_12mWT_sig_genes$time_point <- "12m"
-inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes$time_point <- "6m"
-inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes$time_point <- "12m"
+fea_res_6m <- readRDS(here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_6m.rds"
+))
 
-# add receiver information
-excitatory_neurons_group_6mAD_vs_6mWT_sig_genes$receiver <- "excitatory_neurons"
-excitatory_neurons_group_12mAD_vs_12mWT_sig_genes$receiver <- "excitatory_neurons"
-inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes$receiver <- "inhibitory_neurons"
-inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes$receiver <- "inhibitory_neurons"
+fea_res_12m <- readRDS(here(
+  "results",
+  "intermediate_outputs",
+  "04_ccc",
+  "fea_res_12m.rds"
+))
+```
 
-# combine all 4 dfs into 1 for plotting purposes
-combined_df <- rbind(excitatory_neurons_group_6mAD_vs_6mWT_sig_genes,
-                     excitatory_neurons_group_12mAD_vs_12mWT_sig_genes,
-                     inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes,
-                     inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes) %>%
-  select(gene, log2FoldChange, pvalue, time_point, receiver) %>%
-  pivot_wider(
-    id_cols = gene,
-    names_from = c(time_point, receiver),
-    values_from = c(log2FoldChange, pvalue)
-  ) #%>%
-  #mutate(gene_sig = case_when(
-  #  pvalue_geo < 0.05 & pvalue_gse < 0.05 ~ paste0(gene, "**"),
-  #  pvalue_geo < 0.05 ~ paste0(gene, "*"),
-  #  pvalue_gse < 0.05 ~ paste0(gene, "^"),
-  #  TRUE ~ gene
-  #)) %>%
-  #select(-c(pvalue_geo, pvalue_gse, gene)) %>%
-  #column_to_rownames(var = "gene_sig")
+# Filter MultiNicheNet output
+```{r}
+# number of targets
+top_n_target <- 250
+
+# contrast table
+contrast_tbl <- tibble(
+  contrast = c("X6mAD-X6mWT", "X6mWT-X6mAD", "X12mAD-X12mWT", "X12mWT-X12mAD"),
+  group = c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+)
+
+# set receiver and sender cell types of interest
+receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
+sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
+
+# vector of groups of interest
+group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
+
+# Filter output using above criteria and add time point column
+output_filt <- filter_nichenet(output) %>%
+  mutate(time_point = ifelse(grepl("X6m", group), "6m", "12m"))
+```
+
+# Filter DESeq2 outputs by group-specific targets
+* We filtered DESeq2 outputs (which are cell type and group-specific) by the target genes specific to those groupings.
+```{r}
+# Filter 6-month targets
+in_6m_gex <- filter_dea(output_filt,
+  in_6m_ad_all,
+  receiver_oi = "Inhibitory.Neurons",
+  timepoint_oi = "6m"
+)
+
+ex_6m_gex <- filter_dea(output_filt,
+  ex_6m_ad_all,
+  receiver_oi = "Excitatory.Neurons",
+  timepoint_oi = "6m"
+)
+
+# Filter 12-month targets
+in_12m_gex <- filter_dea(output_filt,
+  in_12m_ad_all,
+  receiver_oi = "Inhibitory.Neurons",
+  timepoint_oi = "12m"
+)
+
+ex_12m_gex <- filter_dea(output_filt,
+  ex_12m_ad_all,
+  receiver_oi = "Excitatory.Neurons",
+  timepoint_oi = "12m"
+)
+
+# Combine group-specific gex dfs into one
+all_gex <- rbind(
+  ex_6m_gex,
+  ex_12m_gex,
+  in_6m_gex,
+  in_12m_gex
+)
+```
+
+# Save Table S3
+* Save filtered DEA output
+```{r}
+# save for future analyses
+saveRDS(
+  all_gex,
+  here("results", "final_outputs", "04_dea", "filtered_dea_targets.rds")
+)
+
+# save as excel file for manuscript (Supplementary Table 3)
+WriteXLS(
+  all_gex,
+  here("results", "final_outputs", "01_figures", "table_s3.xlsx")
+)
+```
+
+# Prepare df for plotting
+* Volcano plots of all targets GEX
+* In order to color the volcano plots differently, we added gex information:
+  * NS/DE: Genes that are not differentially expressed (DE), most are also not significant (NS)
+    * log2FoldChange between -0.2 and 0.2, padj > 0.05 for majority
+  * NS up: Genes that are DE (upregulated), but NS according to multiple hypothesis correction
+    * log2FoldChange > 0.2, padj > 0.05
+  * NS down: Genes that are DE (downregulated), but NS according to multiple hypothesis correction
+    * log2FoldChange < -0.2, padj > 0.05
+  * Sig up/down: Genes that are significantly DE
+    * up: log2FoldChange > 0.2, padj < 0.05
+    * down: log2FoldChange < -0.2, padj < 0.05
+```{r}
+# adding expression information to df
+all_gex$diffexpressed <- "NS/DE"
+
+all_gex$diffexpressed[all_gex$log2FoldChange > 0.2 &
+  all_gex$padj < 0.05] <- "Significantly up"
+
+all_gex$diffexpressed[all_gex$log2FoldChange < -0.2 &
+  all_gex$padj < 0.05] <- "Significantly down"
+
+all_gex$diffexpressed[all_gex$log2FoldChange > 0.2 &
+  all_gex$padj > 0.05] <- "NS up"
+
+all_gex$diffexpressed[all_gex$log2FoldChange < -0.2 &
+  all_gex$padj > 0.05] <- "NS down"
 
 
-# I am excluding the pvalue columns as all of these genes have a adjusted sig p value
-combined_df <- rbind(excitatory_neurons_group_6mAD_vs_6mWT_sig_genes,
-                     excitatory_neurons_group_12mAD_vs_12mWT_sig_genes,
-                     inhibitory_neurons_group_6mAD_vs_6mWT_sig_genes,
-                     inhibitory_neurons_group_12mAD_vs_12mWT_sig_genes) %>%
-  select(gene, log2FoldChange, time_point, receiver) %>%
-  pivot_wider(
-    id_cols = gene,
-    names_from = c(time_point, receiver),
-    values_from = log2FoldChange
-  ) %>%
-  column_to_rownames(var = "gene")
+# add labels to significantly DE genes
+all_gex$delabel <- NA
 
+all_gex$delabel[all_gex$diffexpressed == "Significantly up"] <-
+  all_gex$gene[all_gex$diffexpressed == "Significantly up"]
 
-# Prepare heatmap annotation
-meta <- as.data.frame(colnames(combined_df))
-rownames(meta) <- meta$`colnames(combined_df)`
+all_gex$delabel[all_gex$diffexpressed == "Significantly down"] <-
+  all_gex$gene[all_gex$diffexpressed == "Significantly down"]
+```
 
-receiver <- c("excitatory_neurons", "excitatory_neurons", "inhibitory_neurons", "inhibitory_neurons")
-time_point <- c("6m", "12m", "6m", "12m")
+# Figure 4A
+* Volcano plot of 6m targets
+```{r}
+gex_6m <- all_gex %>%
+  filter(timepoint == "6m")
 
-meta$time_point <- time_point
-meta$receiver <- receiver
+# plot volcano plot
+volcano_6m <- ggplot(
+  gex_6m,
+  aes(
+    x = log2FoldChange,
+    y = -log10(padj),
+    col = diffexpressed,
+    label = delabel
+  )
+) +
+  geom_point(aes(shape = receiver), size = 2) +
+  theme_bw() +
+  geom_text_repel() +
+  scale_color_manual(values = c(
+    "lightblue",
+    "tomato",
+    "grey",
+    "darkblue",
+    "darkred"
+  )) +
+  scale_shape_manual(
+    values = c(17, 19),
+    labels = c("Excitatory Neurons", "Inhibitory Neurons")
+  ) +
+  geom_vline(
+    xintercept = c(-0.2, 0.2),
+    col = "black",
+    linetype = "dotted"
+  ) +
+  geom_hline(
+    yintercept = -log10(0.05),
+    col = "black",
+    linetype = "dotted"
+  ) +
+  xlim(-4, 4) +
+  ylim(0, 15) +
+  labs(
+    x = "log2FoldChange",
+    y = "Adjusted p-value (-log10)",
+    color = "Target Gene Expression"
+  ) +
+  guides(
+    color = guide_legend(override.aes = list(shape = 19, size = 3)),
+    shape = guide_legend("Receiver")
+  ) +
+  theme(
+    axis.text = element_text(face = "bold", color = "black", size = 10),
+    axis.title = element_text(face = "bold", color = "black", size = 12),
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(face = "bold", size = 10)
+  ) +
+  coord_flip()
 
-meta <- meta[, 2:3]
+volcano_6m
 
-
-anno_cols <- list(
-  "receiver" = c(
-    "excitatory_neurons" = "grey75",
-    "inhibitory_neurons" = "grey36"
+# save volcano plot
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "04_dea",
+    "volcano_6m_targets.png"
   ),
-  "time_point" = c(
-    "6m" = "lavender",
-    "12m" = "purple"
-  )
-)
-
-# Generate annotation
-anno <- HeatmapAnnotation(
-  df = meta,
-  show_annotation_name = FALSE,
-  col = anno_cols#,
-  #annotation_legend_param = list(
-  #  dataset = list(
-  #    title = "Receiver",
-  #    direction = "horizontal",
-  #    #labels = c("Morabito", "Lau"),
-  #    labels_gp = gpar(fontface = "bold")
-  #  )
-  )
-#)
-
-# Convert df to matrix
-mat <- as.matrix(combined_df)
-
-# Set heatmap colors
-cols <- colorRamp2(c(-0.5, 0, 0.5), rev(brewer.pal(n = 3, name = "RdBu")))
-
-# Plot heatmap
-gex_heatmap <- Heatmap(mat,
-  col = cols,
-  top_annotation = anno,
-  show_column_names = FALSE,
-  show_row_dend = TRUE,
-  show_column_dend = FALSE,
-  cluster_columns = TRUE,
-  cluster_rows = TRUE,
-  row_title = "Signaling Mediators",
-  row_title_gp = gpar(fontface = "bold", fontsize = 12),
-  #row_names_gp = gpar(col = row_colors, fontface = "bold"),
-  heatmap_legend_param = list(
-    direction = "horizontal",
-    title = "Differential Expression",
-    labels_gp = gpar(fontface = "bold")
-  )
+  volcano_6m,
+  dpi = 400,
+  width = 9,
+  height = 5,
+  bg = "#ffffff"
 )
 ```
 
+# Figure 4B
+* Volcano plot of 12m targets
+```{r}
+gex_12m <- all_gex %>%
+  filter(timepoint == "12m")
 
+# plot volcano plot
+volcano_12m <- ggplot(
+  gex_12m,
+  aes(
+    x = log2FoldChange,
+    y = -log10(padj),
+    col = diffexpressed,
+    label = delabel
+  )
+) +
+  geom_point(aes(shape = receiver), size = 2) +
+  theme_bw() +
+  geom_text_repel() +
+  scale_color_manual(values = c(
+    "lightblue",
+    "tomato",
+    "grey",
+    "darkblue",
+    "darkred"
+  )) +
+  scale_shape_manual(
+    values = c(17, 19),
+    labels = c("Excitatory Neurons", "Inhibitory Neurons")
+  ) +
+  geom_vline(
+    xintercept = c(-0.2, 0.2),
+    col = "black",
+    linetype = "dotted"
+  ) +
+  geom_hline(
+    yintercept = -log10(0.05),
+    col = "black",
+    linetype = "dotted"
+  ) +
+  xlim(-4, 4) +
+  labs(
+    x = "log2FoldChange",
+    y = "Adjusted p-value (-log10)",
+    color = "Target Gene Expression"
+  ) +
+  guides(
+    color = guide_legend(override.aes = list(shape = 19, size = 3)),
+    shape = guide_legend("Receiver")
+  ) +
+  theme(
+    axis.text = element_text(face = "bold", color = "black", size = 10),
+    axis.title = element_text(face = "bold", color = "black", size = 12),
+    legend.title = element_text(face = "bold", size = 12),
+    legend.text = element_text(face = "bold", size = 10)
+  ) +
+  coord_flip()
 
+volcano_12m
 
+# save volcano plot
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "04_dea",
+    "volcano_12m_targets.png"
+  ),
+  volcano_12m,
+  dpi = 400,
+  width = 9,
+  height = 5,
+  bg = "#ffffff"
+)
+```
 
+# Figure 4C
+* Bubbleplot of 6m targets' FEA
+```{r}
+bubbleplot_6m <- ggplot(
+  fea_res_6m,
+  aes(
+    x = condition,
+    y = reorder(term_name, p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(
+    palette = "Greens",
+    limits = c(0, 0.05),
+    breaks = c(0, 0.03, 0.05)
+  ) +
+  labs(
+    x = "Condition",
+    y = "6m Functional Enrichment Terms",
+    fill = "Adj p-value"
+  ) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(face = "bold", color = "black", size = 10),
+    text = element_text(face = "bold", size = 12),
+    axis.text.x = element_text(angle = 0, hjust = 0.5),
+    legend.box = "horizontal"
+  ) +
+  scale_y_discrete(labels = wrap_format(15)) +
+  coord_flip()
+
+bubbleplot_6m
+```
+
+# Figure 4D
+* Bubbleplot of 12m targets' FEA
+```{r}
+# filter FEA further for plotting purposes
+fea_res_12m_filt <- fea_res_12m %>%
+  group_by(condition) %>%
+  top_n(recall, n = 10)
+
+# plot bubble plot
+bubbleplot_12m <- ggplot(
+  fea_res_12m_filt,
+  aes(
+    x = condition,
+    y = reorder(term_name, p_value),
+    size = recall,
+    fill = p_value
+  )
+) +
+  geom_point(alpha = 0.7, shape = 21) +
+  scale_size(range = c(2, 10), name = "Recall") +
+  scale_fill_distiller(
+    palette = "Greens",
+    limits = c(0, 0.05),
+    breaks = c(0, 0.03, 0.05)
+  ) +
+  labs(
+    x = "Condition",
+    y = "12m Functional Enrichment Terms",
+    fill = "Adj p-value"
+  ) +
+  scale_y_discrete(labels = wrap_format(65)) +
+  theme_bw() +
+  theme(
+    axis.text = element_text(face = "bold", color = "black", size = 10),
+    text = element_text(face = "bold", size = 12)
+  )
+
+bubbleplot_12m
+```
+
+# Compile Figure 4
+* Compiling figure by the left (volcano for 6 and 12m and 6m FEA) and right (12m FEA) plots
+```{r}
+left <- ggarrange(
+  volcano_6m,
+  volcano_12m,
+  bubbleplot_6m,
+  nrow = 3,
+  labels = c("A", "B", "C"),
+  align = "v"
+)
+
+right <- ggarrange(
+  bubbleplot_12m,
+  labels = "D"
+)
+
+# compile final figure
+fig4 <- ggarrange(
+  left,
+  right,
+  ncol = 2
+)
+
+# plot figure
+fig4
+```
+
+# Save final figure
+```{r}
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "01_figures",
+    "figure4.png"
+  ),
+  fig4,
+  dpi = 300,
+  width = 15,
+  height = 10,
+  bg = "#ffffff"
+)
+```
 
 # Session info
 ```{r}
 sessionInfo() # see output below
 ```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2     styler_1.9.1    here_1.0.1      ggpubr_0.6.0    cowplot_1.1.1  
+ [6] patchwork_1.1.2 scales_1.2.1    ggrepel_0.9.3   WriteXLS_6.4.0  lubridate_1.9.2
+[11] forcats_1.0.0   stringr_1.5.0   dplyr_1.1.1     purrr_1.0.1     readr_2.1.4    
+[16] tidyr_1.3.0     tibble_3.2.1    ggplot2_3.4.2   tidyverse_2.0.0
+
+loaded via a namespace (and not attached):
+ [1] bit64_4.0.5        vroom_1.6.1        carData_3.0-5      R.utils_2.12.2    
+ [5] yaml_2.3.7         remotes_2.4.2      pillar_1.9.0       backports_1.4.1   
+ [9] glue_1.6.2         digest_0.6.31      RColorBrewer_1.1-3 ggsignif_0.6.4    
+[13] colorspace_2.1-0   htmltools_0.5.5    R.oo_1.25.0        pkgconfig_2.0.3   
+[17] broom_1.0.4        processx_3.8.1     tzdb_0.3.0         timechange_0.2.0  
+[21] generics_0.1.3     farver_2.1.1       car_3.1-2          withr_2.5.0       
+[25] lazyeval_0.2.2     cli_3.6.1          magrittr_2.0.3     crayon_1.5.2      
+[29] evaluate_0.20      ps_1.7.5           R.methodsS3_1.8.2  fansi_1.0.4       
+[33] R.cache_0.16.0     rstatix_0.7.2      xml2_1.3.3         textshaping_0.3.6 
+[37] tools_4.2.3        hms_1.1.3          cyclocomp_1.1.0    lifecycle_1.0.3   
+[41] munsell_0.5.0      callr_3.7.3        rex_1.2.1          compiler_4.2.3    
+[45] systemfonts_1.0.4  rlang_1.1.0        grid_4.2.3         rstudioapi_0.14   
+[49] labeling_0.4.2     rmarkdown_2.21     gtable_0.3.3       abind_1.4-5       
+[53] R6_2.5.1           knitr_1.42         fastmap_1.1.1      bit_4.0.5         
+[57] utf8_1.2.3         rprojroot_2.0.3    ragg_1.2.5         desc_1.4.2        
+[61] stringi_1.7.12     parallel_4.2.3     Rcpp_1.0.10        vctrs_0.6.2       
+[65] tidyselect_1.2.0   xfun_0.38  
 
 # Time tracking
 ```{r}
@@ -209,7 +576,7 @@ fptm <- proc.time() - ptm
 ```
 
 # Reproducibility
-```{r}
+```{r eval=FALSE, include=FALSE}
 # styler
 style_file(here(
   "src",

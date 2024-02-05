@@ -655,9 +655,9 @@ jaccard <- function(a, b) {
   return (intersection/union)
 }
 
-## calculate_jaccard
+## calculate_jaccard_senders
 # a wrapper for code written by Vishal H. Oza. I modified his code for my own usage.
-calculate_jaccard <- function(df, senders, receivers, type) {
+calculate_jaccard_senders <- function(df, senders, receivers, type) {
   if(type == "ligands") {
     # empty list
     jaccard_results <- list()
@@ -724,9 +724,9 @@ calculate_jaccard <- function(df, senders, receivers, type) {
   return(jaccard_results)
 }
 
-## calculate_jaccard2
+## calculate_jaccard_receivers
 # Modified wrapper of calculate_jaccard wrapper. Original code adapted from Vishal H. Oza
-calculate_jaccard2 <- function(df, senders, receivers, type) {
+calculate_jaccard_receivers <- function(df, senders, receivers, type) {
   jaccard_results <- list()
   
   for (i in senders) {
@@ -756,4 +756,23 @@ calculate_jaccard2 <- function(df, senders, receivers, type) {
   
   
   return(jaccard_results)
+}
+
+## filter_dea
+# A function that takes in a MultiNicheNet output to return genes that are targets by group and uses those targets to filter DEA outputs from DESeq2
+filter_dea <- function(filt_mnn_df, dea_df, receiver_oi, timepoint_oi) {
+  # get group-specific targets ----------
+  targets <- filt_mnn_df %>%
+    select(receiver, target, group, time_point) %>%
+    filter(receiver == receiver_oi) %>%
+    filter(time_point == timepoint_oi) %>%
+    unique
+  # filter DESeq2 outputs by targets ----------
+  target_gex <- dea_df %>%
+    filter(gene %in% targets$target) %>%
+    select(gene, log2FoldChange, pvalue, padj) %>%
+    mutate(receiver = receiver_oi) %>%
+    mutate(timepoint = timepoint_oi)
+  # return filtered dea ----------
+  return(target_gex)
 }
