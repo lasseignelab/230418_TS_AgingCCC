@@ -395,9 +395,9 @@ cts_metadata <- function(sce, counts_list) {
 deseq2_dea <- function(cell_types, counts_ls, metadata_ls, group_oi, B, padj_cutoff = 0.05, path, shrinkage) {
   cell_type <- cell_types[1]
   print(cell_type)
-  ifelse(!dir.exists(here(paste0(path, "03_dea/"))),
-         dir.create(here(paste0(path, "03_dea/"))),
-         print("Info: 03_dea directory already exists"))
+  ifelse(!dir.exists(here(path)),
+         dir.create(here(path)),
+         print("Info: directory already exists"))
   idx <- which(names(counts_ls) == cell_type)
   cluster_counts <- counts_ls[[idx]]
   cluster_metadata <- metadata_ls[[idx]]
@@ -419,7 +419,7 @@ deseq2_dea <- function(cell_types, counts_ls, metadata_ls, group_oi, B, padj_cut
     as_tibble()
   # save all results
   write.csv(res_tbl,
-            here(paste0(path, "03_dea/", cell_type, "_", name, "_all_genes.csv")),
+            here(paste0(path, cell_type, "_", name, "_all_genes.csv")),
             quote = FALSE, 
             row.names = FALSE)
   
@@ -428,7 +428,7 @@ deseq2_dea <- function(cell_types, counts_ls, metadata_ls, group_oi, B, padj_cut
     dplyr::arrange(padj)
   
   write.csv(sig_res,
-            here(paste0(path, "03_dea/", cell_type, "_", name, "_sig_genes.csv")),
+            here(paste0(path, cell_type, "_", name, "_sig_genes.csv")),
             quote = FALSE, 
             row.names = FALSE)
 }
