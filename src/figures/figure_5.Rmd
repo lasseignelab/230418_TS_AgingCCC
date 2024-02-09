@@ -22,11 +22,8 @@ __Data__:
 *Filtered DESeq2 output*
 * Name: filtered_dea_targets.rds
 * Location: results/final_outputs/04_dea/
-*AD Gene Lists*
-* Names:
-    1. HP_ALZHEIMER_DISEASE.v2023.2.Hs.tsv
-    2. KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv
-    3. ad_gene_list.csv
+*AD Gene List*
+* Name: ad_genes_mm.rds
 * Location: doc/
 
 __Analysis Plan__:
@@ -54,8 +51,6 @@ set.seed(42)
 # load packages
 suppressPackageStartupMessages({
   library(tidyverse)
-  library(readr)
-  library(gprofiler2)
   library(ggalluvial)
   library(ComplexHeatmap)
   library(circlize)
@@ -92,6 +87,7 @@ colors <- c(
 # Load Data
 * Filtered DESeq2 output
 * MultiNicheNet output
+* AD risk gene list
 ```{r}
 # Target gene expression info from DESeq2
 all_gex <- readRDS(here(
@@ -103,6 +99,9 @@ all_gex <- readRDS(here(
 
 # MultiNicheNet object
 output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+
+# AD gene list
+ad_genes_mm <- readRDS(here("doc", "ad_genes_mm.rds"))
 ```
 
 # Filter MultiNicheNet output
@@ -125,82 +124,6 @@ group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
 
 # Filter output using above criteria and add time point column
 output_filt <- filter_nichenet(output)
-```
-
-# Load & prepare AD gene lists
-* Information on the gene lists can be found in doc/README
-```{r}
-# HP
-## load, grab "GENE_SYMBOLS" row, split by comma, and remove empty strings
-hp <- read_tsv(here("doc", "HP_ALZHEIMER_DISEASE.v2023.2.Hs.tsv")) %>%
-  column_to_rownames("STANDARD_NAME")
-
-hp <- hp["GENE_SYMBOLS", ]
-
-hp <- unlist(strsplit(hp, ","))
-
-hp <- hp[hp != ""]
-
-# KEGG
-## load, grab "GENE_SYMBOLS" row, split by comma, and remove empty strings
-kegg <- read_tsv(here("doc", "KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv")) %>%
-  column_to_rownames("STANDARD_NAME")
-
-kegg <- kegg["GENE_SYMBOLS", ]
-
-kegg <- unlist(strsplit(kegg, ","))
-
-kegg <- kegg[kegg != ""]
-
-# GWAS
-gwas <- read_csv(here("doc", "ad_gene_list.csv")) %>%
-  pull(Gene)
-
-# combine into 1 gene list
-ad_genes <- c(hp, kegg, gwas) %>%
-  unique()
-```
-
-# Make & Save Table S4
-```{r}
-kegg <- kegg %>%
-  as.data.frame() %>%
-  rename("gene" = ".") %>%
-  mutate(origin = "msigdb: KEGG_ALZHEIMERS_DISEASE")
-
-hp <- hp %>%
-  as.data.frame() %>%
-  rename("gene" = ".") %>%
-  mutate(origin = "msigdb: HP_ALZHEIMER_DISEASE")
-
-gwas <- gwas %>%
-  as.data.frame() %>%
-  rename("gene" = ".") %>%
-  mutate(origin = "GWAS: Bellenguez, et al. (2022)")
-
-table_s4 <- rbind(
-  kegg,
-  hp,
-  gwas
-)
-
-WriteXLS::WriteXLS(table_s4, here(
-  "results",
-  "final_outputs",
-  "01_figures",
-  "table_s4.xlsx"
-))
-```
-
-# Convert AD gene list to mouse & save
-```{r}
-ad_genes_mm <- gorth(ad_genes,
-  source_organism = "hsapiens",
-  target_organism = "mmusculus"
-)$ortholog_name
-
-# saving both converted gene sets for later use
-saveRDS(ad_genes_mm, file = here("doc", "ad_genes_mm.rds"))
 ```
 
 # Filter DEA info by AD-associated genes
@@ -278,7 +201,7 @@ alluvial_lr_all <- ggplot(lr_all,
     legend.text = element_text(face = "bold", size = 10),
     legend.title = element_text(face = "bold", size = 12),
     plot.background = element_rect(fill = "white", size = 0),
-    plot.margin = grid::unit(c(-0.2, 0.3, 0, -3.5), "cm"),
+    plot.margin = grid::unit(c(-0.4, 0.3, 0, -2.5), "cm"),
     axis.ticks = element_blank(),
     axis.ticks.length = unit(0, "pt"),
     axis.text.y = element_blank(),
@@ -331,6 +254,36 @@ target_df <- targets_ad %>%
   )) %>%
   column_to_rownames(var = "gene_sig")
 
+targets_ad$receiver <- gsub("\\.", " ", targets_ad$receiver)
+
+
+
+target_df <- targets_ad %>%
+  select(gene, log2FoldChange, receiver, timepoint) %>%
+  pivot_wider(
+    id_cols = gene,
+    names_from = c(receiver, timepoint),
+    values_from = log2FoldChange
+  ) %>%
+  column_to_rownames(var = "gene")
+
+target_df <- target_df[, col_order]
+
+target_df2 <- targets_ad %>%
+  select(gene, padj, receiver, timepoint) %>%
+  pivot_wider(
+    id_cols = gene,
+    names_from = c(receiver, timepoint),
+    values_from = padj
+  ) %>%
+  column_to_rownames(var = "gene")
+
+target_df2[is.na(target_df2)] <- "NS"
+
+target_df2 <- target_df2[, col_order]
+
+mat2 <- as.matrix(target_df2)
+
 # Replace NAs with 0
 target_df[is.na(target_df)] <- 0
 
@@ -338,17 +291,24 @@ target_df[is.na(target_df)] <- 0
 meta <- as.data.frame(colnames(target_df))
 rownames(meta) <- meta$`colnames(target_df)`
 
-meta$receiver <- sub("^[^_]*_([^_]*)_.+", "\\1", colnames(target_df))
+#meta$receiver <- sub("^[^_]*_([^_]*)_.+", "\\1", colnames(target_df))
+#meta$timepoint <- sub(".*_", "", colnames(target_df))
+
+#meta <- meta %>%
+#  select(receiver, timepoint)
+
+meta$cell_type <- sub("_.*", "", colnames(target_df))
 meta$timepoint <- sub(".*_", "", colnames(target_df))
+#meta$cell_type <- gsub("\\.", " ", meta$cell_type)
 
 meta <- meta %>%
-  select(receiver, timepoint)
+  select(cell_type, timepoint)
 
 # Set annotation colors
 anno_cols <- list(
-  "receiver" = c(
-    "Excitatory.Neurons" = "slateblue3",
-    "Inhibitory.Neurons" = "darkslategray3"
+  "cell_type" = c(
+    "Excitatory Neurons" = "slateblue3",
+    "Inhibitory Neurons" = "darkslategray3"
   ),
   "timepoint" = c(
     "6m" = "#6A3D9A",
@@ -362,7 +322,7 @@ anno <- HeatmapAnnotation(
   show_annotation_name = FALSE,
   col = anno_cols,
   annotation_legend_param = list(
-    receiver = list(
+    cell_type = list(
       title = "Receiver",
       direction = "horizontal",
       labels = c("Excitatory Neurons", "Inhibitory Neurons"),
@@ -381,7 +341,8 @@ anno <- HeatmapAnnotation(
 mat <- as.matrix(target_df)
 
 # Set heatmap colors
-cols <- colorRamp2(c(-0.5, 0, 0.5), rev(brewer.pal(n = 3, name = "RdBu")))
+#cols <- colorRamp2(c(-0.5, 0, 0.5), rev(brewer.pal(n = 3, name = "BrBG")))
+cols <- colorRamp2(c(-1, -0.5, 0, 0.5, 1), c("darkblue", "lightblue", "grey95", "tomato", "darkred"))
 
 # Plot
 set.seed(42)
@@ -523,6 +484,15 @@ fig5 <- ggarrange(left,
   align = "hv",
   ncol = 2
 )
+
+## testing
+fig5 <- ggarrange(alluvial_lr_all,
+  heatmaps,
+  align = "hv",
+  ncol = 2,
+  labels = c("A", "B")
+)
+
 ```
 
 # Save figure 5
@@ -532,12 +502,12 @@ ggsave(
     "results",
     "final_outputs",
     "01_figures",
-    "figure5.png"
+    "figure5_v2.png"
   ),
   fig5,
   dpi = 300,
   width = 13,
-  height = 10,
+  height = 8,
   bg = "#ffffff"
 )
 ```
