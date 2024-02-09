@@ -19,8 +19,11 @@ __Data__:
 *MultiNicheNet object*
 * Name: multinichenet_output.rds
 * Location: data/ccc/
-*AD Gene List*
-* Name: ad_genes_mm.rds
+*AD Gene Lists*
+* Names:
+    1. HP_ALZHEIMER_DISEASE.v2023.2.Hs.tsv
+    2. KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv
+    3. ad_gene_list.csv
 * Location: doc/
  
 __Analysis Plan__:
@@ -49,6 +52,8 @@ suppressPackageStartupMessages({
   library(nichenetr)
   library(igraph)
   library(tidyverse)
+  library(readr)
+  library(gprofiler2)
   library(here)
   library(styler)
   library(lintr)
@@ -61,9 +66,82 @@ source(here("src", "functions_CCCin3xTgAD.R"))
 ```{r}
 # MultiNicheNet output
 output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+```
 
-# AD gene list
-ad_genes_mm <- readRDS(here("doc", "ad_genes_mm.rds"))
+# Load & prepare AD gene lists
+* Information on the gene lists can be found in doc/README
+```{r}
+# HP
+## load, grab "GENE_SYMBOLS" row, split by comma, and remove empty strings
+hp <- read_tsv(here("doc", "HP_ALZHEIMER_DISEASE.v2023.2.Hs.tsv")) %>%
+  column_to_rownames("STANDARD_NAME")
+
+hp <- hp["GENE_SYMBOLS", ]
+
+hp <- unlist(strsplit(hp, ","))
+
+hp <- hp[hp != ""]
+
+# KEGG
+## load, grab "GENE_SYMBOLS" row, split by comma, and remove empty strings
+kegg <- read_tsv(here("doc", "KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv")) %>%
+  column_to_rownames("STANDARD_NAME")
+
+kegg <- kegg["GENE_SYMBOLS", ]
+
+kegg <- unlist(strsplit(kegg, ","))
+
+kegg <- kegg[kegg != ""]
+
+# GWAS
+gwas <- read_csv(here("doc", "ad_gene_list.csv")) %>%
+  pull(Gene)
+
+# combine into 1 gene list
+ad_genes <- c(hp, kegg, gwas) %>%
+  unique()
+```
+
+# Make & Save Table S4
+```{r}
+kegg <- kegg %>%
+  as.data.frame() %>%
+  rename("gene" = ".") %>%
+  mutate(origin = "msigdb: KEGG_ALZHEIMERS_DISEASE")
+
+hp <- hp %>%
+  as.data.frame() %>%
+  rename("gene" = ".") %>%
+  mutate(origin = "msigdb: HP_ALZHEIMER_DISEASE")
+
+gwas <- gwas %>%
+  as.data.frame() %>%
+  rename("gene" = ".") %>%
+  mutate(origin = "GWAS: Bellenguez, et al. (2022)")
+
+table_s4 <- rbind(
+  kegg,
+  hp,
+  gwas
+)
+
+WriteXLS::WriteXLS(table_s4, here(
+  "results",
+  "final_outputs",
+  "01_figures",
+  "table_s4.xlsx"
+))
+```
+
+# Convert AD gene list to mouse & save
+```{r}
+ad_genes_mm <- gorth(ad_genes,
+  source_organism = "hsapiens",
+  target_organism = "mmusculus"
+)$ortholog_name
+
+# saving both converted gene sets for later use
+saveRDS(ad_genes_mm, file = here("doc", "ad_genes_mm.rds"))
 ```
 
 # NicheNet-v2 prior
