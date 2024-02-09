@@ -776,3 +776,161 @@ filter_dea <- function(filt_mnn_df, dea_df, receiver_oi, timepoint_oi) {
   # return filtered dea ----------
   return(target_gex)
 }
+
+## signaling_igraph
+# A function that plots and saves signaling GRNs for each LRT pair in multiple datasets, while also returning igraph objects for downstream analysis.
+signaling_igraph <- function(filtered_df, ligand_tf_matrix, weighted_networks,
+                             lr_network, sig_network, gr_network, plots) {
+  igraph_objects_list <- tibble::lst()
+  for(name in names(filtered_df)) {
+    lrt_filtered <- filtered_df[[name]]
+    print(name)
+    interactions <- lrt_filtered$id_target %>%
+      unique()
+    
+    igraph_objects <- tibble::lst()
+    for (i in interactions) {
+      ccc_combined_sub <- lrt_filtered[lrt_filtered$id_target == i,]
+      ligand_oi <- ccc_combined_sub$ligand
+      receptor_oi <- ccc_combined_sub$receptor
+      sender_oi <- ccc_combined_sub$sender
+      receiver_oi <- ccc_combined_sub$receiver
+      id <- ccc_combined_sub$id_target
+      print(id)
+      
+      targets_all <- lrt_filtered %>% 
+        filter(ligand == ligand_oi &
+                 receiver == receiver_oi &
+                 sender == sender_oi &
+                 receptor == receptor_oi) %>%
+        pull(target) %>%
+        unique()
+      
+      active_signaling_network <-
+        nichenetr::get_ligand_signaling_path_with_receptor(
+          ligand_tf_matrix = ligand_tf_matrix,
+          ligands_all = ligand_oi,
+          receptors_all = receptor_oi,
+          targets_all = targets_all,
+          weighted_networks = weighted_networks,
+          top_n_regulators = 2)
+      
+      
+      data_source_network <- nichenetr::infer_supporting_datasources(
+        signaling_graph_list = active_signaling_network,
+        lr_network = lr_network,
+        sig_network = sig_network,
+        gr_network = gr_network)
+      
+      
+      active_signaling_network_min_max <- active_signaling_network
+      active_signaling_network_min_max$sig <- active_signaling_network_min_max$sig %>%
+        mutate(weight = ((weight-min(weight))/(max(weight)-min(weight))) + 0.75)
+      active_signaling_network_min_max$gr <- active_signaling_network_min_max$gr %>%
+        mutate(weight = ((weight-min(weight))/(max(weight)-min(weight))) + 0.75)
+      
+      
+      colors <- c("ligand" = "purple",
+                  "receptor" = "orange",
+                  "target" = "royalblue",
+                  "mediator" = "grey60")
+      
+      ggraph_signaling_path <- suppressWarnings(
+        make_ggraph_signaling_path(active_signaling_network_min_max,
+                                   colors,
+                                   ligand_oi,
+                                   receptor_oi,
+                                   targets_all))
+      
+      png(here(paste0(plots, name, "/", id, ".png")))
+      plot <- ggraph_signaling_path$plot
+      print(plot)
+      dev.off()
+      
+      active_signaling_network_min_max$sig$type <- "ppi"
+      active_signaling_network_min_max$gr$type <- "grn"
+      
+      df <- rbind(active_signaling_network_min_max$sig,
+                  active_signaling_network_min_max$gr)
+      
+      igraph <- graph_from_data_frame(df, directed = TRUE)
+      E(igraph)$weight <- df$weight
+      
+      igraph_objects[[id]] <- igraph
+    }
+    new_name <- paste0("igraph_objects_", name)
+    igraph_objects_list[new_name] <- list(igraph_objects)
+  }
+  return(igraph_objects_list)
+}
+
+## analyze_network
+# A function to analyze network properties, especially between receptors and targets of interest. Adapted from Jordan H. Whitlock.
+analyze_network <- function(igraph_object, receptor, target, name){
+  # calculate network properties
+  diameter <- diameter(igraph_object)
+  edge_number <- length(E(igraph_object))
+  
+  # Calculate degree centrality for receptor
+  degree_centrality <- degree(igraph_object, v = receptor, mode = "out")
+  
+  # Calculate betweeness centrality for receptor
+  betweenness_centrality <- betweenness(igraph_object, v = receptor)
+  
+  # Calculate closeness centrality for receptor
+  closeness_centrality <- closeness(igraph_object, v = receptor)
+  
+  # all nodes attached to receptor
+  neighbors_receptor <- neighbors(igraph_object, v = receptor, mode = "out")
+  
+  # receptor to target shortest path
+  shortest_path <- shortest_paths(igraph_object,
+                                  from = receptor,
+                                  to = target,
+                                  output = "both")
+  
+  
+  
+  all_shortest_path <- all_shortest_paths(igraph_object,
+                                          from = receptor,
+                                          to = target,
+                                          mode = "out")
+  
+  dijkstra <- distances(igraph_object,
+                        algorithm = "dijkstra")
+  
+  
+  results <- list(id = name,
+                  diameter = diameter,
+                  edge_number = edge_number,
+                  degree_centrality = degree_centrality,
+                  betweenness_centrality = betweenness_centrality,
+                  closeness_centrality = closeness_centrality,
+                  neighbors_receptor = neighbors_receptor,
+                  shortest_path = shortest_path,
+                  all_shortest_path = all_shortest_path,
+                  dijkstra = dijkstra
+  )
+  
+  return(results)
+}
+
+## network_topology
+# A wrapper function to allow for automatic application of the analyze_network function across multiple igraph objects.
+network_topology <- function(object_list) {
+  network_proporties_list <- list()
+  for (name in names(object_list)) {
+    igraph <- object_list[[name]]
+    if(any(is.nan(E(igraph)$weight)) == TRUE) {
+      print("No known edge between receptor and target")
+      
+    } else {
+      string <- unlist(strsplit(name, "_"))
+      receptor <- string[2]
+      target <- string[5]
+      
+      network_proporties_list[[name]] <- analyze_network(igraph = igraph, receptor = receptor, target = target, name = name)
+    }
+  }
+  return(network_proporties_list)
+}
