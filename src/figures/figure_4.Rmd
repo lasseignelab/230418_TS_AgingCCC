@@ -287,7 +287,7 @@ volcano_6m <- ggplot(
   xlim(-4, 4) +
   ylim(0, 15) +
   labs(
-    x = "log2FoldChange",
+    x = "6m AD-WT log2FoldChange",
     y = "Adjusted p-value (-log10)",
     color = "Target Gene Expression"
   ) +
@@ -363,7 +363,7 @@ volcano_12m <- ggplot(
   ) +
   xlim(-4, 4) +
   labs(
-    x = "log2FoldChange",
+    x = "12m AD-WT log2FoldChange",
     y = "Adjusted p-value (-log10)",
     color = "Target Gene Expression"
   ) +
