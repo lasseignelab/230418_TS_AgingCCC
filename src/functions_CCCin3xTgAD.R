@@ -934,3 +934,29 @@ network_topology <- function(object_list) {
   }
   return(network_proporties_list)
 }
+
+## get_mediators
+# A function that filters network properties for their neighbor aka their signaling mediator by receiver.
+get_mediators <- function(network_properties_df) {
+  meds_in <- vector()
+  meds_ex <- vector()
+  
+  for (name in names(network_properties_df)) {
+    df <- network_properties_df[[name]]
+    neighbors <- as_ids(df$neighbors_receptor)
+    string <- unlist(strsplit(name, "_"))
+    receiver <- string[4]
+    if(length(neighbors) == 0) {
+      # print names of interactions that did not have mediators
+      print(name)
+    } else if(receiver == "Inhibitory.Neurons") {
+      meds_in <- c(meds_in, neighbors) %>% unique()
+    } else {
+      meds_ex <- c(meds_ex, neighbors) %>% unique()
+    }
+  }
+  
+  return(list(meds_in = meds_in, meds_ex = meds_ex))
+}
+
+
