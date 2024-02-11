@@ -227,8 +227,17 @@ sig_ad_targets <- targets_ad %>%
 # Filter MultiNicheNet object by AD genes
 ad_lrt <- output_filt %>%
   select(sender, receiver, ligand, receptor, target, group) %>%
-  filter(target %in% targets_ad$gene) %>%
+  filter(target %in% sig_ad_targets$gene) %>%
   unique()
+
+# Add asterisks to AD-associated genes for ligands and receptors
+ad_lrt$ligand <- ifelse(ad_lrt$ligand %in% ad_genes_mm,
+                        paste0(ad_lrt$ligand, "*"),
+                        paste(ad_lrt$ligand))
+
+ad_lrt$receptor <- ifelse(ad_lrt$receptor %in% ad_genes_mm,
+                          paste0(ad_lrt$receptor, "*"),
+                          paste(ad_lrt$receptor))
 
 # Factorize columns of interest (for plotting purposes)
 vec <- c("ligand", "receptor", "target")
@@ -247,7 +256,6 @@ ad_lrt$receptor <- reorder(
 )
 ```
 
-## NEED TO ADD ASTERISK HERE
 # Figure 5A
 * Alluvial plot of LRs that have an AD-associated target gene
 ```{r}
@@ -322,20 +330,14 @@ ggsave(
 # Prepare inputs for panel B
 ```{r}
 # Grab gene expression info for mediators by group from DESeq2 outputs
-meds_inhib_6m <- inhibitory_neurons_6m %>%
-  filter(gene %in% meds_in_6m)
-
 meds_inhib_12m <- inhibitory_neurons_12m %>%
   filter(gene %in% meds_in_12m)
-
-meds_excit_6m <- excitatory_neurons_6m %>%
-  filter(gene %in% meds_ex_6m)
 
 meds_excit_12m <- excitatory_neurons_12m %>%
   filter(gene %in% meds_ex_12m)
 
 # combine into 1 df
-meds_all <- rbind(meds_inhib_6m, meds_inhib_12m, meds_excit_6m, meds_excit_12m)
+meds_all <- rbind(meds_inhib_12m, meds_excit_12m)
 ```
 
 # Prepare mediator heatmap matrix
@@ -417,10 +419,10 @@ mat_dea <- as.matrix(dea_df)
 # Prepare AD target gene heatmap matrix
 ```{r}
 # Remove the period in cell type names
-targets_ad$receiver <- gsub("\\.", " ", targets_ad$receiver)
+sig_ad_targets$receiver <- gsub("\\.", " ", sig_ad_targets$receiver)
 
 # Pivot target gene expression df by group
-target_df <- targets_ad %>%
+target_df <- sig_ad_targets %>%
   select(gene, log2FoldChange, receiver, timepoint) %>%
   pivot_wider(
     id_cols = gene,
@@ -442,7 +444,7 @@ target_df[is.na(target_df)] <- 0
 mat_target <- as.matrix(target_df)
 
 # Create second df with p-values
-target_df_pvalue <- targets_ad %>%
+target_df_pvalue <- sig_ad_targets %>%
   select(gene, padj, receiver, timepoint) %>%
   pivot_wider(
     id_cols = gene,
@@ -461,7 +463,6 @@ target_df_pvalue[is.na(target_df_pvalue)] <- "NS"
 mat_target_pvalue <- as.matrix(target_df_pvalue)
 ```
 
-# Create heatmap list
 # Figure 5B
 * Two heatmaps combined into 1
   * Top: AD-risk gene targets gex
@@ -472,6 +473,7 @@ cols <- colorRamp2(c(-1, -0.5, 0, 0.5, 1),
                    c("darkblue", "lightblue", "grey95", "tomato", "darkred"))
 
 # AD-associated target gene heatmap
+set.seed(42)
 target_heatmap <- Heatmap(
   mat_target,
   col = cols,
@@ -501,6 +503,7 @@ target_heatmap <- Heatmap(
 )
 
 # Mediator heatmap
+set.seed(42)
 mediator_heatmap <- Heatmap(
   mat_dea,
   col = cols,
@@ -561,7 +564,8 @@ ggsave(
 
 # Compile Figure 5
 ```{r}
-fig5 <- ggarrange(alluvial_lr_all,
+fig5 <- ggarrange(
+  alluvial_lr_all,
   heatmaps,
   align = "hv",
   ncol = 2,
@@ -576,7 +580,7 @@ ggsave(
     "results",
     "final_outputs",
     "01_figures",
-    "figure5_v3.png"
+    "figure5.png"
   ),
   fig5,
   dpi = 300,
