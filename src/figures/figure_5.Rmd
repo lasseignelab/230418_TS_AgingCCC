@@ -133,15 +133,6 @@ network_properties_12m <- read_rds(here(
   "signaling_grn_properties_12m.rds"))
 
 # Unfiltered DESeq2 outputs for receivers
-excitatory_neurons_6m <- read_csv(here(
-  "results",
-  "intermediate_outputs",
-  "03_dea",
-  "excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv"
-)) %>%
-  mutate(cell_type = "Excitatory Neurons") %>%
-  mutate(time_point = "6m")
-
 excitatory_neurons_12m <- read_csv(here(
   "results",
   "intermediate_outputs",
@@ -150,15 +141,6 @@ excitatory_neurons_12m <- read_csv(here(
 )) %>%
   mutate(cell_type = "Excitatory Neurons") %>%
   mutate(time_point = "12m")
-
-inhibitory_neurons_6m <- read_csv(here(
-  "results",
-  "intermediate_outputs",
-  "03_dea",
-  "inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv"
-)) %>%
-  mutate(cell_type = "Inhibitory Neurons") %>%
-  mutate(time_point = "6m")
 
 inhibitory_neurons_12m <- read_csv(here(
   "results",
