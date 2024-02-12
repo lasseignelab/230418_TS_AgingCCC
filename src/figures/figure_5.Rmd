@@ -1,12 +1,12 @@
 ---
 title: "figure_5"
 author: "Tabea M. Soelter"
-date: "2024-01-28"
+date: "2024-02-09"
 output: html_document
 ---
 **Plotting Manuscript Figure 5**
 
-__Goal__: This is a script for generating figure 5 of my manuscript. We are also saving supplementary table 4.
+__Goal__: This is a script for generating figure 5 of my manuscript. We are also saving supp table 4.
 
 __Reproducibility__:
 * GitHub: lasseignelab/230418_TS_AgingCCC
@@ -15,7 +15,7 @@ __Reproducibility__:
 * HPC: Yes
     * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
 
-__Data__: 
+__Data__:
 *MultiNicheNet object*
 * Name: multinichenet_output.rds
 * Location: data/ccc/
@@ -25,18 +25,31 @@ __Data__:
 *AD Gene List*
 * Name: ad_genes_mm.rds
 * Location: doc/
+*Network properties*
+* Names: signaling_grn_properties_6m.rds, signaling_grn_properties_12m.rds
+* Location: results/intermediate_outputs/05_grn/
+*Unfiltered DESeq2 outputs*
+* Names:
+  1. excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+  2. excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+  3. inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+  4. inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+* Location: results/intermediate_outputs/03_dea/
 
-__Analysis Plan__:
+#__Analysis Plan__: EDIT THIS
 * Load necessary packages
 * Load data
-  * Load AD gene lists
+  * Filtered DESeq2 output
   * MultiNicheNet object
+  * AD gene list
+  * Network properties
   * DESeq2 outputs
 * Filter all input data
 * Plot individual panels:
   * A: Alluvial plot of LRs where targets are AD genes
-  * B: Heatmap of targets that are AD genes showing their differential gex
-  * C: Alluvial plot of LRs where either the ligand or the receptor is an AD gene
+  * B: Split Heatmap
+      * Top: differential gex of AD-associated targets
+      * Bottom: differential gex of mediators of AD-associated interactions
 * Compile figure
 * Save figure
 
@@ -55,6 +68,7 @@ suppressPackageStartupMessages({
   library(ComplexHeatmap)
   library(circlize)
   library(RColorBrewer)
+  library(igraph)
   library(patchwork)
   library(cowplot)
   library(ggpubr)
@@ -85,12 +99,14 @@ colors <- c(
 ```
 
 # Load Data
-* Filtered DESeq2 output
+* Filtered target gene DESeq2 output
 * MultiNicheNet output
 * AD risk gene list
+* Network properties
+* Unfiltered DESeq2 outputs for receivers
 ```{r}
 # Target gene expression info from DESeq2
-all_gex <- readRDS(here(
+all_gex <- read_rds(here(
   "results",
   "final_outputs",
   "04_dea",
@@ -98,10 +114,42 @@ all_gex <- readRDS(here(
 ))
 
 # MultiNicheNet object
-output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
+output <- read_rds(here("data", "ccc", "multinichenet_output.rds"))
 
 # AD gene list
-ad_genes_mm <- readRDS(here("doc", "ad_genes_mm.rds"))
+ad_genes_mm <- read_rds(here("doc", "ad_genes_mm.rds"))
+
+# Network properties
+network_properties_6m <- read_rds(here(
+  "results",
+  "intermediate_outputs",
+  "05_grn",
+  "signaling_grn_properties_6m.rds"))
+
+network_properties_12m <- read_rds(here(
+  "results",
+  "intermediate_outputs",
+  "05_grn",
+  "signaling_grn_properties_12m.rds"))
+
+# Unfiltered DESeq2 outputs for receivers
+excitatory_neurons_12m <- read_csv(here(
+  "results",
+  "intermediate_outputs",
+  "03_dea",
+  "excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv"
+)) %>%
+  mutate(cell_type = "Excitatory Neurons") %>%
+  mutate(time_point = "12m")
+
+inhibitory_neurons_12m <- read_csv(here(
+  "results",
+  "intermediate_outputs",
+  "03_dea",
+  "inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv"
+)) %>%
+  mutate(cell_type = "Inhibitory Neurons") %>%
+  mutate(time_point = "12m")
 ```
 
 # Filter MultiNicheNet output
@@ -126,7 +174,27 @@ group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
 output_filt <- filter_nichenet(output)
 ```
 
-# Filter DEA info by AD-associated genes
+# Filter network properties
+* We are interested in the signaling mediators
+  * In the network, we deemed any outgoing edge from the receptor to another node constitutes a mediator
+  * Therefore, we are grabbing the neighbors of our AD-associated interactions here
+```{r}
+# 6 month properties
+properties_6m_filt <- get_mediators(network_properties_6m)
+
+meds_in_6m <- properties_6m_filt$meds_in
+
+meds_ex_6m <- properties_6m_filt$meds_ex
+
+# 12 month properties
+properties_12m_filt <- get_mediators(network_properties_12m)
+
+meds_in_12m <- properties_12m_filt$meds_in
+
+meds_ex_12m <- properties_12m_filt$meds_ex
+```
+
+# Filter target DEA info by AD-associated genes
 ```{r}
 targets_ad <- all_gex %>%
   filter(gene %in% ad_genes_mm)
@@ -136,13 +204,22 @@ sig_ad_targets <- targets_ad %>%
   filter(padj < 0.05)
 ```
 
-# Prepare df for plotting
+# Prepare df for plotting panel A
 ```{r}
 # Filter MultiNicheNet object by AD genes
 ad_lrt <- output_filt %>%
   select(sender, receiver, ligand, receptor, target, group) %>%
   filter(target %in% sig_ad_targets$gene) %>%
   unique()
+
+# Add asterisks to AD-associated genes for ligands and receptors
+ad_lrt$ligand <- ifelse(ad_lrt$ligand %in% ad_genes_mm,
+                        paste0(ad_lrt$ligand, "*"),
+                        paste(ad_lrt$ligand))
+
+ad_lrt$receptor <- ifelse(ad_lrt$receptor %in% ad_genes_mm,
+                          paste0(ad_lrt$receptor, "*"),
+                          paste(ad_lrt$receptor))
 
 # Factorize columns of interest (for plotting purposes)
 vec <- c("ligand", "receptor", "target")
@@ -154,6 +231,7 @@ ad_lrt$ligand <- reorder(
   ad_lrt$ligand,
   desc(ad_lrt$sender)
 )
+
 ad_lrt$receptor <- reorder(
   ad_lrt$receptor,
   desc(ad_lrt$sender)
@@ -163,7 +241,7 @@ ad_lrt$receptor <- reorder(
 # Figure 5A
 * Alluvial plot of LRs that have an AD-associated target gene
 ```{r}
-# Filter for LRs only
+# Filter for unique LRs only
 lr_all <- ad_lrt %>%
   select(sender, ligand, receptor) %>%
   unique()
@@ -212,8 +290,10 @@ alluvial_lr_all <- ggplot(lr_all,
   guides(fill = guide_legend(title = "Sender"))
 
 alluvial_lr_all
+```
 
-# save plot
+# Save panel A
+```{r}
 ggsave(
   here(
     "results",
@@ -229,77 +309,54 @@ ggsave(
 )
 ```
 
-# Figure 5B
-* Heatmap of targets that are also AD genes
+# Prepare inputs for panel B
 ```{r}
-# Prepare input df (pivot to create gene by celltype/timepoint matrix)
-target_df <- targets_ad %>%
-  select(gene, log2FoldChange, padj, receiver, timepoint) %>%
+# Grab gene expression info for mediators by group from DESeq2 outputs
+meds_inhib_12m <- inhibitory_neurons_12m %>%
+  filter(gene %in% meds_in_12m)
+
+meds_excit_12m <- excitatory_neurons_12m %>%
+  filter(gene %in% meds_ex_12m)
+
+# combine into 1 df
+meds_all <- rbind(meds_inhib_12m, meds_excit_12m)
+```
+
+# Prepare mediator heatmap matrix
+```{r}
+# Pivot mediator gene expression df by group
+dea_df <- meds_all %>%
+  select(gene, log2FoldChange, cell_type, time_point) %>%
   pivot_wider(
     id_cols = gene,
-    names_from = c(receiver, timepoint),
-    values_from = c(log2FoldChange, padj)
-  ) %>%
-  mutate(gene_sig = case_when(
-    padj_Excitatory.Neurons_12m < 0.05 ~ paste0(gene, "^"),
-    padj_Inhibitory.Neurons_12m < 0.05 ~ paste0(gene, "*"),
-    padj_Inhibitory.Neurons_6m < 0.05 ~ paste0(gene, "*"),
-    TRUE ~ gene
-  )) %>%
-  select(-c(
-    padj_Excitatory.Neurons_12m,
-    padj_Inhibitory.Neurons_12m,
-    padj_Inhibitory.Neurons_6m,
-    gene
-  )) %>%
-  column_to_rownames(var = "gene_sig")
-
-targets_ad$receiver <- gsub("\\.", " ", targets_ad$receiver)
-
-
-
-target_df <- targets_ad %>%
-  select(gene, log2FoldChange, receiver, timepoint) %>%
-  pivot_wider(
-    id_cols = gene,
-    names_from = c(receiver, timepoint),
+    names_from = c(cell_type, time_point),
     values_from = log2FoldChange
   ) %>%
   column_to_rownames(var = "gene")
 
-target_df <- target_df[, col_order]
+# Replace NAs with 0
+dea_df[is.na(dea_df)] <- 0
 
-target_df2 <- targets_ad %>%
-  select(gene, padj, receiver, timepoint) %>%
+# Create second df which includes the p-values
+dea_df_pvalue <- meds_all %>%
+  select(gene, padj, cell_type, time_point) %>%
   pivot_wider(
     id_cols = gene,
-    names_from = c(receiver, timepoint),
+    names_from = c(cell_type, time_point),
     values_from = padj
   ) %>%
   column_to_rownames(var = "gene")
 
-target_df2[is.na(target_df2)] <- "NS"
-
-target_df2 <- target_df2[, col_order]
-
-mat2 <- as.matrix(target_df2)
-
-# Replace NAs with 0
-target_df[is.na(target_df)] <- 0
+# Replace NAs with not significant (NS) and convert to a matrix
+dea_df_pvalue[is.na(dea_df_pvalue)] <- "NS"
+mat_dea_pvalue <- as.matrix(dea_df_pvalue)
 
 # Prepare heatmap annotation
-meta <- as.data.frame(colnames(target_df))
-rownames(meta) <- meta$`colnames(target_df)`
+meta <- as.data.frame(colnames(dea_df))
+rownames(meta) <- meta$`colnames(dea_df)`
 
-#meta$receiver <- sub("^[^_]*_([^_]*)_.+", "\\1", colnames(target_df))
-#meta$timepoint <- sub(".*_", "", colnames(target_df))
-
-#meta <- meta %>%
-#  select(receiver, timepoint)
-
-meta$cell_type <- sub("_.*", "", colnames(target_df))
-meta$timepoint <- sub(".*_", "", colnames(target_df))
-#meta$cell_type <- gsub("\\.", " ", meta$cell_type)
+meta$cell_type <- sub("_.*", "", colnames(dea_df))
+meta$timepoint <- sub(".*_", "", colnames(dea_df))
 
 meta <- meta %>%
   select(cell_type, timepoint)
@@ -323,176 +380,179 @@ anno <- HeatmapAnnotation(
   col = anno_cols,
   annotation_legend_param = list(
     cell_type = list(
-      title = "Receiver",
+      title = "Cell Type",
       direction = "horizontal",
-      labels = c("Excitatory Neurons", "Inhibitory Neurons"),
       labels_gp = gpar(fontface = "bold", fontsize = 10),
       title_gp = gpar(fontface = "bold", fontsize = 12)
     ),
     timepoint = list(
       title = "Time Point",
+      direction = "horizontal",
       labels_gp = gpar(fontface = "bold", fontsize = 10),
       title_gp = gpar(fontface = "bold", fontsize = 12)
     )
   )
 )
 
+# Convert df to matrix
+mat_dea <- as.matrix(dea_df)
+```
+
+# Prepare AD target gene heatmap matrix
+```{r}
+# Remove the period in cell type names
+sig_ad_targets$receiver <- gsub("\\.", " ", sig_ad_targets$receiver)
+
+# Pivot target gene expression df by group
+target_df <- sig_ad_targets %>%
+  select(gene, log2FoldChange, receiver, timepoint) %>%
+  pivot_wider(
+    id_cols = gene,
+    names_from = c(receiver, timepoint),
+    values_from = log2FoldChange
+  ) %>%
+  column_to_rownames(var = "gene")
+
+# Grab column order from mediator df
+col_order <- colnames(dea_df)
+
+# Reorder columns
+target_df <- target_df[, col_order]
+
+# Replace NAs with 0
+target_df[is.na(target_df)] <- 0
+
 # Convert df to matrix for plotting
-mat <- as.matrix(target_df)
+mat_target <- as.matrix(target_df)
 
+# Create second df with p-values
+target_df_pvalue <- sig_ad_targets %>%
+  select(gene, padj, receiver, timepoint) %>%
+  pivot_wider(
+    id_cols = gene,
+    names_from = c(receiver, timepoint),
+    values_from = padj
+  ) %>%
+  column_to_rownames(var = "gene")
+
+# As before, re-order columns to match mediator df
+target_df_pvalue <- target_df_pvalue[, col_order]
+
+# Replace NAs
+target_df_pvalue[is.na(target_df_pvalue)] <- "NS"
+
+# Convert to matrix
+mat_target_pvalue <- as.matrix(target_df_pvalue)
+```
+
+# Figure 5B
+* Two heatmaps combined into 1
+  * Top: AD-risk gene targets gex
+  * Bottom: Signaling mediators gex
+```{r}
 # Set heatmap colors
-#cols <- colorRamp2(c(-0.5, 0, 0.5), rev(brewer.pal(n = 3, name = "BrBG")))
-cols <- colorRamp2(c(-1, -0.5, 0, 0.5, 1), c("darkblue", "lightblue", "grey95", "tomato", "darkred"))
+cols <- colorRamp2(c(-1, -0.5, 0, 0.5, 1),
+                   c("darkblue", "lightblue", "grey95", "tomato", "darkred"))
 
-# Plot
+# AD-associated target gene heatmap
 set.seed(42)
-gex_heatmap <- Heatmap(mat,
+target_heatmap <- Heatmap(
+  mat_target,
   col = cols,
-  top_annotation = anno,
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    if(mat_target_pvalue[i, j] < 0.05) {
+      grid.text("*", x, y,
+                gp = gpar(fontsize = 14,
+                          fontface = "bold",
+                          col = "white"))
+    } else {
+      grid.text("", x, y)
+    }},
   show_column_names = FALSE,
   show_row_dend = TRUE,
   show_column_dend = FALSE,
-  cluster_columns = TRUE,
+  cluster_columns = FALSE,
   cluster_rows = TRUE,
-  row_title = "AD-associated Target Genes",
-  row_title_gp = gpar(fontface = "bold", fontsize = 14),
+  row_title = "AD-associated Targets",
+  row_title_gp = gpar(fontface = "bold", fontsize = 12),
   row_names_gp = gpar(fontface = "bold", fontsize = 10),
   heatmap_legend_param = list(
     direction = "horizontal",
-    title = "Differential Expression",
+    title = "AD-WT Log2FC",
     labels_gp = gpar(fontface = "bold", fontsize = 10),
     title_gp = gpar(fontface = "bold", fontsize = 12)
   )
 )
 
-draw(gex_heatmap,
-  heatmap_legend_side = "right",
-  annotation_legend_side = "right",
-  merge_legend = TRUE
+# Mediator heatmap
+set.seed(42)
+mediator_heatmap <- Heatmap(
+  mat_dea,
+  col = cols,
+  cell_fun = function(j, i, x, y, width, height, fill) {
+    if(mat_dea_pvalue[i, j] < 0.05) {
+      grid.text("*", x, y,
+                gp = gpar(fontsize = 14,
+                          fontface = "bold",
+                          col = "black"))
+    } else {
+      grid.text("", x, y)
+    }
+  },
+  show_column_names = FALSE,
+  show_row_dend = TRUE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  row_title = "Signaling Mediators of AD-associated LRTs",
+  row_title_gp = gpar(fontface = "bold", fontsize = 12),
+  row_names_gp = gpar(fontface = "bold", fontsize = 10),
+  show_heatmap_legend = FALSE
 )
 
-# grab plot and legends for combining plot
-heatmap <- grid.grabExpr(
-  draw(gex_heatmap,
+# Combine the annotation with the heatmaps
+heatmap_ls <- anno %v% target_heatmap %v% mediator_heatmap
+
+# Plot combined heatmaps
+draw(heatmap_ls)
+```
+
+# Save 5B
+```{r}
+# Grab combined heatmap with legends to save
+heatmaps <- grid.grabExpr(
+  draw(heatmap_ls,
     heatmap_legend_side = "right",
     annotation_legend_side = "right",
     merge_legend = TRUE
   )
 )
 
-# save plot
+# save
 ggsave(
   here(
     "results",
     "final_outputs",
     "03_ccc",
-    "heatmap_ad_targets.png"
+    "ad_target_mediators_heatmap.png"
   ),
-  heatmap,
+  heatmaps,
   dpi = 300,
-  width = 6,
-  height = 6,
+  width = 8,
+  height = 10,
   bg = "#ffffff"
 )
 ```
 
-# Figure 5C
-* Filter for LRs that are AD genes
-* So either the ligand OR the receptor has to be an AD gene
+# Compile Figure 5
 ```{r}
-# Include only LRs where either the ligand or the receptor is an AD gene
-ad_lr <- output_filt %>%
-  select(sender, receiver, ligand, receptor, target, group) %>%
-  filter(ligand %in% ad_genes_mm | receptor %in% ad_genes_mm) %>%
-  unique()
-
-ad_lr_filt <- ad_lr %>%
-  select(sender, ligand, receptor) %>%
-  unique()
-
-# Plot
-alluvial_lr_ad <- ggplot(ad_lr_filt,
-  aes(axis1 = ligand, axis2 = receptor),
-  label = stratum
-) +
-  scale_x_discrete(limits = c("Ligand", "Receptor")) +
-  xlab("Type") +
-  geom_alluvium() +
-  stat_alluvium(lode.guidance = "frontback") +
-  geom_stratum(aes(fill = sender)) +
-  geom_label(
-    stat = "stratum",
-    fill = "white",
-    aes(label = after_stat(stratum)),
-    size = 3,
-    fontface = "bold"
-  ) +
-  geom_flow(aes(fill = sender), stat = "alluvium", color = "black") +
-  scale_fill_manual(values = colors) +
-  scale_x_discrete(limits = c("Ligand", "Receptor")) +
-  theme_void() +
-  theme(
-    axis.text.x = element_text(vjust = 2, face = "bold", size = 12),
-    legend.position = c(0.9, 0.5),
-    legend.margin = margin(0, 0, 0, -0.2, "cm"),
-    legend.text = element_text(face = "bold", size = 10),
-    legend.title = element_text(face = "bold", size = 12),
-    plot.background = element_rect(fill = "white", size = 0),
-    plot.margin = grid::unit(c(0.5, 0, 0, -3), "cm"),
-    axis.ticks = element_blank(),
-    axis.ticks.length = unit(0, "pt"),
-    axis.text.y = element_blank(),
-    axis.title.y = element_blank(),
-    panel.spacing = element_blank(),
-    axis.title.x = element_blank()
-  ) +
-  guides(fill = guide_legend(title = "Sender"))
-
-alluvial_lr_ad
-
-# save plot
-ggsave(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "alluvial_lr_ad.png"
-  ),
-  alluvial_lr_ad,
-  dpi = 300,
-  width = 6,
-  height = 6,
-  bg = "#ffffff"
-)
-```
-
-# Combine figure 5
-```{r}
-left <- ggarrange(alluvial_lr_all,
-  labels = "A"
-)
-
-right <- ggarrange(heatmap,
-  alluvial_lr_ad,
-  nrow = 2,
-  labels = c("B", "C")
-)
-
-# Combine left and right sides, align horizontally and vertically
-fig5 <- ggarrange(left,
-  right,
-  align = "hv",
-  ncol = 2
-)
-
-## testing
-fig5 <- ggarrange(alluvial_lr_all,
+fig5 <- ggarrange(
+  alluvial_lr_all,
   heatmaps,
   align = "hv",
   ncol = 2,
   labels = c("A", "B")
 )
-
 ```
 
 # Save figure 5
@@ -502,7 +562,7 @@ ggsave(
     "results",
     "final_outputs",
     "01_figures",
-    "figure5_v2.png"
+    "figure5.png"
   ),
   fig5,
   dpi = 300,
@@ -535,36 +595,34 @@ attached base packages:
 
 other attached packages:
  [1] lintr_3.0.2           styler_1.9.1          here_1.0.1            ggpubr_0.6.0         
- [5] cowplot_1.1.1         patchwork_1.1.2       RColorBrewer_1.1-3    circlize_0.4.15      
- [9] ComplexHeatmap_2.14.0 ggalluvial_0.12.5     gprofiler2_0.2.1      lubridate_1.9.2      
+ [5] cowplot_1.1.1         patchwork_1.1.2       igraph_1.4.2          RColorBrewer_1.1-3   
+ [9] circlize_0.4.15       ComplexHeatmap_2.14.0 ggalluvial_0.12.5     lubridate_1.9.2      
 [13] forcats_1.0.0         stringr_1.5.0         dplyr_1.1.1           purrr_1.0.1          
 [17] readr_2.1.4           tidyr_1.3.0           tibble_3.2.1          ggplot2_3.4.2        
 [21] tidyverse_2.0.0      
 
 loaded via a namespace (and not attached):
- [1] colorspace_2.1-0    ggsignif_0.6.4      rjson_0.2.21        rprojroot_2.0.3    
- [5] GlobalOptions_0.1.2 clue_0.3-64         rstudioapi_0.14     farver_2.1.1       
- [9] remotes_2.4.2       bit64_4.0.5         fansi_1.0.4         xml2_1.3.3         
-[13] codetools_0.2-19    R.methodsS3_1.8.2   doParallel_1.0.17   knitr_1.42         
-[17] jsonlite_1.8.4      Cairo_1.6-0         broom_1.0.4         cluster_2.1.4      
-[21] png_0.1-8           R.oo_1.25.0         compiler_4.2.3      httr_1.4.5         
-[25] backports_1.4.1     fastmap_1.1.1       lazyeval_0.2.2      cli_3.6.1          
-[29] htmltools_0.5.5     tools_4.2.3         gtable_0.3.3        glue_1.6.2         
-[33] carData_3.0-5       vctrs_0.6.2         iterators_1.0.14    xfun_0.38          
-[37] ps_1.7.5            timechange_0.2.0    lifecycle_1.0.3     WriteXLS_6.4.0     
-[41] rstatix_0.7.2       scales_1.2.1        vroom_1.6.1         ragg_1.2.5         
-[45] hms_1.1.3           rex_1.2.1           parallel_4.2.3      yaml_2.3.7         
-[49] stringi_1.7.12      S4Vectors_0.36.2    desc_1.4.2          foreach_1.5.2      
-[53] BiocGenerics_0.44.0 cyclocomp_1.1.0     shape_1.4.6         rlang_1.1.0        
-[57] pkgconfig_2.0.3     systemfonts_1.0.4   matrixStats_0.63.0  bitops_1.0-7       
-[61] evaluate_0.20       htmlwidgets_1.6.2   labeling_0.4.2      bit_4.0.5          
-[65] processx_3.8.1      tidyselect_1.2.0    magrittr_2.0.3      R6_2.5.1           
-[69] IRanges_2.32.0      generics_0.1.3      pillar_1.9.0        withr_2.5.0        
-[73] abind_1.4-5         RCurl_1.98-1.12     crayon_1.5.2        car_3.1-2          
-[77] utf8_1.2.3          plotly_4.10.1       tzdb_0.3.0          rmarkdown_2.21     
-[81] GetoptLong_1.0.5    data.table_1.14.8   callr_3.7.3         digest_0.6.31      
-[85] R.cache_0.16.0      R.utils_2.12.2      textshaping_0.3.6   stats4_4.2.3       
-[89] munsell_0.5.0       viridisLite_0.4.1
+ [1] matrixStats_0.63.0  bit64_4.0.5         doParallel_1.0.17   rprojroot_2.0.3    
+ [5] R.cache_0.16.0      tools_4.2.3         backports_1.4.1     utf8_1.2.3         
+ [9] R6_2.5.1            BiocGenerics_0.44.0 lazyeval_0.2.2      colorspace_2.1-0   
+[13] GetoptLong_1.0.5    withr_2.5.0         tidyselect_1.2.0    processx_3.8.1     
+[17] bit_4.0.5           compiler_4.2.3      textshaping_0.3.6   cli_3.6.1          
+[21] Cairo_1.6-0         xml2_1.3.3          desc_1.4.2          labeling_0.4.2     
+[25] scales_1.2.1        callr_3.7.3         systemfonts_1.0.4   digest_0.6.31      
+[29] rmarkdown_2.21      R.utils_2.12.2      pkgconfig_2.0.3     htmltools_0.5.5    
+[33] fastmap_1.1.1       rlang_1.1.0         GlobalOptions_0.1.2 rstudioapi_0.14    
+[37] farver_2.1.1        shape_1.4.6         generics_0.1.3      vroom_1.6.1        
+[41] car_3.1-2           R.oo_1.25.0         magrittr_2.0.3      munsell_0.5.0      
+[45] S4Vectors_0.36.2    fansi_1.0.4         abind_1.4-5         lifecycle_1.0.3    
+[49] R.methodsS3_1.8.2   stringi_1.7.12      yaml_2.3.7          carData_3.0-5      
+[53] parallel_4.2.3      crayon_1.5.2        hms_1.1.3           knitr_1.42         
+[57] ps_1.7.5            pillar_1.9.0        rjson_0.2.21        ggsignif_0.6.4     
+[61] codetools_0.2-19    stats4_4.2.3        glue_1.6.2          evaluate_0.20      
+[65] rex_1.2.1           remotes_2.4.2       png_0.1-8           vctrs_0.6.2        
+[69] tzdb_0.3.0          foreach_1.5.2       gtable_0.3.3        clue_0.3-64        
+[73] xfun_0.38           broom_1.0.4         cyclocomp_1.1.0     rstatix_0.7.2      
+[77] ragg_1.2.5          iterators_1.0.14    IRanges_2.32.0      cluster_2.1.4      
+[81] timechange_0.2.0
 
 # Time tracking
 ```{r}
@@ -573,7 +631,7 @@ fptm <- proc.time() - ptm
 # convert to minutes
 (fptm[3] / 60)
 
-# Time elapsed: 10 minutes
+# Time elapsed: 5 minutes
 ```
 
 # Reproducibility
