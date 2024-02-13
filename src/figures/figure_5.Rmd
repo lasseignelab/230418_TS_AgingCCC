@@ -36,7 +36,7 @@ __Data__:
   4. inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv
 * Location: results/intermediate_outputs/03_dea/
 
-#__Analysis Plan__: EDIT THIS
+__Analysis Plan__:
 * Load necessary packages
 * Load data
   * Filtered DESeq2 output

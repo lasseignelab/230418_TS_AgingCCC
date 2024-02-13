@@ -959,4 +959,23 @@ get_mediators <- function(network_properties_df) {
   return(list(meds_in = meds_in, meds_ex = meds_ex))
 }
 
+## prepare_tf_mat
+# A function to prepare a DESeq2 output. It pivots the df by gene and replaces NA's with zero before converting to a matrix.
+prepare_tf_mat <- function(degs, timepoint) {
+  # pivot to get genes as columns with stat value
+  df <- degs %>%
+    select(stat, gene) %>%
+    pivot_wider(
+      names_from = "gene",
+      values_from = "stat"
+    ) %>%
+    as.data.frame()
+  # Name row by time point
+  rownames(df) <- timepoint
+  # Replace NAs with 0
+  df[is.na(df)] <- 0
+  # turn into a matrix
+  mat <- as.matrix(df)
+  
+}
 
