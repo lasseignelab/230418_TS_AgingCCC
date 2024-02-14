@@ -19,9 +19,6 @@ __Data__:
 *MultiNicheNet object*
 * Name: multinichenet_output.rds
 * Location: data/ccc/
-*Filtered DESeq2 output*
-* Name: filtered_dea_targets.rds
-* Location: results/final_outputs/04_dea/
 *AD Gene List*
 * Name: ad_genes_mm.rds
 * Location: doc/
@@ -39,7 +36,6 @@ __Data__:
 __Analysis Plan__:
 * Load necessary packages
 * Load data
-  * Filtered DESeq2 output
   * MultiNicheNet object
   * AD gene list
   * Network properties
@@ -99,20 +95,11 @@ colors <- c(
 ```
 
 # Load Data
-* Filtered target gene DESeq2 output
 * MultiNicheNet output
 * AD risk gene list
 * Network properties
 * Unfiltered DESeq2 outputs for receivers
 ```{r}
-# Target gene expression info from DESeq2
-all_gex <- read_rds(here(
-  "results",
-  "final_outputs",
-  "04_dea",
-  "filtered_dea_targets.rds"
-))
-
 # MultiNicheNet object
 output <- read_rds(here("data", "ccc", "multinichenet_output.rds"))
 
@@ -124,13 +111,15 @@ network_properties_6m <- read_rds(here(
   "results",
   "intermediate_outputs",
   "05_grn",
-  "signaling_grn_properties_6m.rds"))
+  "signaling_grn_properties_6m.rds"
+))
 
 network_properties_12m <- read_rds(here(
   "results",
   "intermediate_outputs",
   "05_grn",
-  "signaling_grn_properties_12m.rds"))
+  "signaling_grn_properties_12m.rds"
+))
 
 # Unfiltered DESeq2 outputs for receivers
 excitatory_neurons_12m <- read_csv(here(
@@ -150,6 +139,16 @@ inhibitory_neurons_12m <- read_csv(here(
 )) %>%
   mutate(cell_type = "Inhibitory Neurons") %>%
   mutate(time_point = "12m")
+```
+
+# Combine DEA outputs
+```{r}
+# combine into 1 df
+combined_gex <- rbind(inhibitory_neurons_12m, excitatory_neurons_12m)
+
+# select only necessary columns
+combined_gex <- combined_gex %>%
+  select(gene, log2FoldChange, padj, cell_type, time_point)
 ```
 
 # Filter MultiNicheNet output
@@ -196,11 +195,8 @@ meds_ex_12m <- properties_12m_filt$meds_ex
 
 # Filter target DEA info by AD-associated genes
 ```{r}
-targets_ad <- all_gex %>%
-  filter(gene %in% ad_genes_mm)
-
-# filter by significance
-sig_ad_targets <- targets_ad %>%
+sig_ad_targets <- combined_gex %>%
+  filter(gene %in% ad_genes_mm) %>%
   filter(padj < 0.05)
 ```
 
@@ -214,12 +210,14 @@ ad_lrt <- output_filt %>%
 
 # Add asterisks to AD-associated genes for ligands and receptors
 ad_lrt$ligand <- ifelse(ad_lrt$ligand %in% ad_genes_mm,
-                        paste0(ad_lrt$ligand, "*"),
-                        paste(ad_lrt$ligand))
+  paste0(ad_lrt$ligand, "*"),
+  paste(ad_lrt$ligand)
+)
 
 ad_lrt$receptor <- ifelse(ad_lrt$receptor %in% ad_genes_mm,
-                          paste0(ad_lrt$receptor, "*"),
-                          paste(ad_lrt$receptor))
+  paste0(ad_lrt$receptor, "*"),
+  paste(ad_lrt$receptor)
+)
 
 # Factorize columns of interest (for plotting purposes)
 vec <- c("ligand", "receptor", "target")
@@ -311,21 +309,18 @@ ggsave(
 
 # Prepare inputs for panel B
 ```{r}
-# Grab gene expression info for mediators by group from DESeq2 outputs
-meds_inhib_12m <- inhibitory_neurons_12m %>%
-  filter(gene %in% meds_in_12m)
+# Compile mediators
+meds_all <- c(meds_in_12m, meds_ex_12m)
 
-meds_excit_12m <- excitatory_neurons_12m %>%
-  filter(gene %in% meds_ex_12m)
-
-# combine into 1 df
-meds_all <- rbind(meds_inhib_12m, meds_excit_12m)
+# Grab gene expression info for mediators
+meds_all_dea <- combined_gex %>%
+  filter(gene %in% meds_all)
 ```
 
 # Prepare mediator heatmap matrix
 ```{r}
 # Pivot mediator gene expression df by group
-dea_df <- meds_all %>%
+dea_df <- meds_all_dea %>%
   select(gene, log2FoldChange, cell_type, time_point) %>%
   pivot_wider(
     id_cols = gene,
@@ -334,11 +329,8 @@ dea_df <- meds_all %>%
   ) %>%
   column_to_rownames(var = "gene")
 
-# Replace NAs with 0
-dea_df[is.na(dea_df)] <- 0
-
-# Create second df which includes the p-values
-dea_df_pvalue <- meds_all %>%
+# Create second df which includes the p-values instead of log2FC
+dea_df_pvalue <- meds_all_dea %>%
   select(gene, padj, cell_type, time_point) %>%
   pivot_wider(
     id_cols = gene,
@@ -347,8 +339,10 @@ dea_df_pvalue <- meds_all %>%
   ) %>%
   column_to_rownames(var = "gene")
 
-# Replace NAs with not significant (NS) and convert to a matrix
+# Replace NAs with not significant (NS; prevents asterisks during plotting)
 dea_df_pvalue[is.na(dea_df_pvalue)] <- "NS"
+
+# Convert to a matrix
 mat_dea_pvalue <- as.matrix(dea_df_pvalue)
 
 # Prepare heatmap annotation
@@ -400,15 +394,23 @@ mat_dea <- as.matrix(dea_df)
 
 # Prepare AD target gene heatmap matrix
 ```{r}
-# Remove the period in cell type names
-sig_ad_targets$receiver <- gsub("\\.", " ", sig_ad_targets$receiver)
+# Grab AD-associated targets from LRTs
+targets <- ad_lrt$target %>%
+  unique() %>%
+  as.vector()
+
+# Get gene expression information of targets
+targets_dea <- combined_gex %>% filter(gene %in% targets)
+
+# Replace periods in cell type names
+targets_dea$cell_type <- gsub("\\.", " ", targets_dea$cell_type)
 
 # Pivot target gene expression df by group
-target_df <- sig_ad_targets %>%
-  select(gene, log2FoldChange, receiver, timepoint) %>%
+target_df <- targets_dea %>%
+  select(gene, log2FoldChange, cell_type, time_point) %>%
   pivot_wider(
     id_cols = gene,
-    names_from = c(receiver, timepoint),
+    names_from = c(cell_type, time_point),
     values_from = log2FoldChange
   ) %>%
   column_to_rownames(var = "gene")
@@ -419,18 +421,15 @@ col_order <- colnames(dea_df)
 # Reorder columns
 target_df <- target_df[, col_order]
 
-# Replace NAs with 0
-target_df[is.na(target_df)] <- 0
-
 # Convert df to matrix for plotting
 mat_target <- as.matrix(target_df)
 
 # Create second df with p-values
-target_df_pvalue <- sig_ad_targets %>%
-  select(gene, padj, receiver, timepoint) %>%
+target_df_pvalue <- targets_dea %>%
+  select(gene, padj, cell_type, time_point) %>%
   pivot_wider(
     id_cols = gene,
-    names_from = c(receiver, timepoint),
+    names_from = c(cell_type, time_point),
     values_from = padj
   ) %>%
   column_to_rownames(var = "gene")
@@ -438,7 +437,7 @@ target_df_pvalue <- sig_ad_targets %>%
 # As before, re-order columns to match mediator df
 target_df_pvalue <- target_df_pvalue[, col_order]
 
-# Replace NAs
+# Replace NAs for plotting
 target_df_pvalue[is.na(target_df_pvalue)] <- "NS"
 
 # Convert to matrix
@@ -451,8 +450,10 @@ mat_target_pvalue <- as.matrix(target_df_pvalue)
   * Bottom: Signaling mediators gex
 ```{r}
 # Set heatmap colors
-cols <- colorRamp2(c(-1, -0.5, 0, 0.5, 1),
-                   c("darkblue", "lightblue", "grey95", "tomato", "darkred"))
+cols <- colorRamp2(
+  c(-1, -0.5, 0, 0.5, 1),
+  c("darkblue", "lightblue", "grey95", "tomato", "darkred")
+)
 
 # AD-associated target gene heatmap
 set.seed(42)
@@ -460,14 +461,18 @@ target_heatmap <- Heatmap(
   mat_target,
   col = cols,
   cell_fun = function(j, i, x, y, width, height, fill) {
-    if(mat_target_pvalue[i, j] < 0.05) {
+    if (mat_target_pvalue[i, j] < 0.05) {
       grid.text("*", x, y,
-                gp = gpar(fontsize = 14,
-                          fontface = "bold",
-                          col = "white"))
+        gp = gpar(
+          fontsize = 14,
+          fontface = "bold",
+          col = "white"
+        )
+      )
     } else {
       grid.text("", x, y)
-    }},
+    }
+  },
   show_column_names = FALSE,
   show_row_dend = TRUE,
   show_column_dend = FALSE,
@@ -490,11 +495,14 @@ mediator_heatmap <- Heatmap(
   mat_dea,
   col = cols,
   cell_fun = function(j, i, x, y, width, height, fill) {
-    if(mat_dea_pvalue[i, j] < 0.05) {
+    if (mat_dea_pvalue[i, j] < 0.05) {
       grid.text("*", x, y,
-                gp = gpar(fontsize = 14,
-                          fontface = "bold",
-                          col = "black"))
+        gp = gpar(
+          fontsize = 14,
+          fontface = "bold",
+          col = "black"
+        )
+      )
     } else {
       grid.text("", x, y)
     }
