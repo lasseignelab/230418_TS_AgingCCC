@@ -1,0 +1,276 @@
+---
+title: "01_tf_activity"
+author: "Tabea M. Soelter"
+date: "2024-01-26"
+output: html_document
+---
+**Transcription factor activity analysis using decoupleR**
+
+__Goal__: Infer TF activity from pseudo-bulked DEGs in receiver cell types (excitatory and inhibitory neurons)
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+    * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*Unfiltered DESeq2 outputs*
+* Names:
+  1. excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+  2. excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+  3. inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv
+  4. inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv
+* Location: results/intermediate_outputs/06_bio_activity/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * DEGs from DESeq2
+* Download prior
+  * CollecTRI
+* Prepare for TF activity analysis
+  * Create 1 matrix which has all DEGs per cell type
+* Differential TF activity analysis using Multivariate Linear Model (MLM)
+* Save output
+  
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# Load packages
+suppressPackageStartupMessages({
+  library(decoupleR)
+  library(OmnipathR)
+  library(tidyverse)
+  library(igraph)
+  library(ComplexHeatmap)
+  library(circlize)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r message=FALSE}
+# DEGs in inhibitory neurons from DESeq2
+inhibitory_degs_6m <- read_csv(
+  here(
+    "results",
+    "intermediate_outputs",
+    "06_bio_activity",
+    "inhibitory_neurons_group_6mAD_vs_6mWT_all_genes.csv"
+  )
+)
+
+inhibitory_degs_12m <- read_csv(
+  here(
+    "results",
+    "intermediate_outputs",
+    "06_bio_activity",
+    "inhibitory_neurons_group_12mAD_vs_12mWT_all_genes.csv"
+  )
+)
+
+# DEGs in excitatory neurons from DESeq2
+excitatory_degs_6m <- read_csv(
+  here(
+    "results",
+    "intermediate_outputs",
+    "06_bio_activity",
+    "excitatory_neurons_group_6mAD_vs_6mWT_all_genes.csv"
+  )
+)
+
+excitatory_degs_12m <- read_csv(
+  here(
+    "results",
+    "intermediate_outputs",
+    "06_bio_activity",
+    "excitatory_neurons_group_12mAD_vs_12mWT_all_genes.csv"
+  )
+)
+```
+
+# Download prior
+* Accessed on 240208
+* The connection to collectri through OmnipathR often fails
+  * The next chunk loads the collectri prior I downloaded and saved
+```{r}
+collectri <- get_collectri(organism = "mouse", split_complexes = FALSE)
+# Downloaded 38823 interactions
+
+# Save prior
+write.csv(collectri, file = here("doc", "collectri_prior_mm.csv"))
+```
+
+# Load prior
+* If there are OmnipathR connection issues to collectri, load in the prior I used and saved
+```{r}
+collectri <- read.csv(here("doc", "collectri_prior_mm.csv"), row.names = 1)
+```
+
+# Inhibitory Neuron TF activity analysis
+* We use genes that are differentially expressed (as determined by DESeq2), therefore any TF activity observed, is different between AD and WT.
+  * Since WT was our base, any changes are to be interpreted with respect to AD
+* We use the Multivariate Linear Model (MLM) from decoupleR
+* We do this for both receiver cell types
+```{r}
+# Pivot DESeq2 outputs to get genes as columns with stat values
+mat_in_6m <- prepare_tf_mat(inhibitory_degs_6m, timepoint = "6m")
+
+mat_in_12m <- prepare_tf_mat(inhibitory_degs_12m, timepoint = "12m")
+
+# Combine time points
+df_in <- merge(mat_in_6m, mat_in_12m, all = TRUE)
+
+# replace NAs with 0
+df_in[is.na(df_in)] <- 0
+
+# turn into matrix
+mat_in <- as.matrix(df_in)
+
+rownames(mat_in) <- c("6m", "12m")
+
+# TF activity analysis
+tf_acts_in <- run_mlm(
+  mat = t(mat_in),
+  network = collectri
+)
+```
+
+# Excitatory Neuron TF activity analysis
+```{r}
+# Pivot DESeq2 outputs to get genes as columns with stat values
+mat_ex_6m <- prepare_tf_mat(excitatory_degs_6m, timepoint = "6m")
+
+mat_ex_12m <- prepare_tf_mat(excitatory_degs_12m, timepoint = "12m")
+
+# Combine time points
+df_ex <- merge(mat_ex_6m, mat_ex_12m, all = TRUE)
+
+# replace NAs with 0
+df_ex[is.na(df_ex)] <- 0
+
+# turn into matrix
+mat_ex <- as.matrix(df_ex)
+
+rownames(mat_ex) <- c("6m", "12m")
+
+# TF activity analysis
+tf_acts_ex <- run_mlm(
+  mat = t(mat_ex),
+  network = collectri
+)
+```
+
+# Save TF activity outputs
+```{r}
+saveRDS(
+  tf_acts_in,
+  here(
+    "results",
+    "final_outputs",
+    "05_bio_activity",
+    "inhibitory_tf_activity.rds"
+  )
+)
+
+saveRDS(
+  tf_acts_ex,
+  here(
+    "results",
+    "final_outputs",
+    "05_bio_activity",
+    "excitatory_tf_activity.rds"
+  )
+)
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.3 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] grid      stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2           styler_1.9.1          here_1.0.1           
+ [4] circlize_0.4.15       ComplexHeatmap_2.14.0 igraph_1.4.2         
+ [7] lubridate_1.9.2       forcats_1.0.0         stringr_1.5.0        
+[10] dplyr_1.1.1           purrr_1.0.1           readr_2.1.4          
+[13] tidyr_1.3.0           tibble_3.2.1          ggplot2_3.4.2        
+[16] tidyverse_2.0.0       OmnipathR_3.9.8       decoupleR_2.9.1      
+
+loaded via a namespace (and not attached):
+ [1] matrixStats_0.63.0  bit64_4.0.5         doParallel_1.0.17   RColorBrewer_1.1-3 
+ [5] progress_1.2.2      httr_1.4.5          rprojroot_2.0.3     R.cache_0.16.0     
+ [9] tools_4.2.3         backports_1.4.1     utf8_1.2.3          R6_2.5.1           
+[13] lazyeval_0.2.2      BiocGenerics_0.44.0 colorspace_2.1-0    GetoptLong_1.0.5   
+[17] withr_2.5.0         processx_3.8.1      tidyselect_1.2.0    prettyunits_1.1.1  
+[21] bit_4.0.5           curl_5.0.0          compiler_4.2.3      cli_3.6.1          
+[25] rvest_1.0.3         xml2_1.3.3          desc_1.4.2          scales_1.2.1       
+[29] checkmate_2.1.0     callr_3.7.3         rappdirs_0.3.3      digest_0.6.31      
+[33] R.utils_2.12.2      rmarkdown_2.21      pkgconfig_2.0.3     htmltools_0.5.5    
+[37] parallelly_1.35.0   fastmap_1.1.1       rlang_1.1.0         GlobalOptions_0.1.2
+[41] readxl_1.4.2        rstudioapi_0.14     shape_1.4.6         generics_0.1.3     
+[45] jsonlite_1.8.4      vroom_1.6.1         R.oo_1.25.0         magrittr_2.0.3     
+[49] Matrix_1.5-4        Rcpp_1.0.10         munsell_0.5.0       S4Vectors_0.36.2   
+[53] fansi_1.0.4         logger_0.2.2        lifecycle_1.0.3     R.methodsS3_1.8.2  
+[57] stringi_1.7.12      yaml_2.3.7          parallel_4.2.3      crayon_1.5.2       
+[61] lattice_0.21-8      hms_1.1.3           ps_1.7.5            knitr_1.42         
+[65] pillar_1.9.0        rjson_0.2.21        codetools_0.2-19    stats4_4.2.3       
+[69] glue_1.6.2          evaluate_0.20       rex_1.2.1           remotes_2.4.2      
+[73] png_0.1-8           vctrs_0.6.2         tzdb_0.3.0          foreach_1.5.2      
+[77] cellranger_1.1.0    gtable_0.3.3        clue_0.3-64         xfun_0.38          
+[81] cyclocomp_1.1.0     later_1.3.0         iterators_1.0.14    IRanges_2.32.0     
+[85] cluster_2.1.4       timechange_0.2.0
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "bio_activity",
+  "01_tf_activity.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "bio_activity",
+  "01_tf_activity.Rmd"
+))
+```
