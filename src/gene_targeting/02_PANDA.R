@@ -33,7 +33,7 @@ print("expression loaded")
 pandaResults <- makePanda(motif, ppi, expression)
 name <- sub(".Rdata", "", basename(args[1]))
 save(pandaResults, file = paste0(wd,
-                                 "results/intermediate_outputs/07_panda/",
+                                 "data/panda/",
                                  name,
                                  ".Rdata"))
 rm(pandaResults)
