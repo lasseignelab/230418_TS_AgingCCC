@@ -74,10 +74,12 @@ sample_sheet <- readRDS(here("doc/sample_sheet.rds"))
 ```
 
 # Create necessary data directories
+* Needed either for this script or the array after this
 ```{r}
 directories <- c(
   here("data/pseudobulk_split"),
-  here("data/PANDA_inputs")
+  here("data/PANDA_inputs"),
+  here("data/panda")
 )
 
 lapply(directories[!directories %in% dir()], dir.create)
