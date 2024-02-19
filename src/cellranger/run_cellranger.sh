@@ -23,7 +23,7 @@ module load Singularity
 module load CellRanger/6.1.1
 
 ## Variables
-WD="/data/user/tsoelter/230418_TS_AgingCCC"
+WD="/data/user/tsoelter/projects/230418_TS_AgingCCC"
 
 ID_LIST=(`cat ${WD}/src/cellranger/id_list.txt`) 
 ID_INPUT=`echo ${ID_LIST[$SLURM_ARRAY_TASK_ID]}` 
