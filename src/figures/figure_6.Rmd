@@ -1,0 +1,561 @@
+---
+title: "figure_6"
+author: "Tabea M. Soelter"
+date: "2024-02-19"
+output: html_document
+---
+**Plotting Manuscript Figure 6 and Supplementary Figure 5**
+
+__Goal__: This is a script for generating figure 6 of my manuscript. We are also saving supp figure 5.
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.2
+* HPC: Yes
+    * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*AD Gene List*
+* Name: ad_genes_mm.rds
+* Location: doc/
+*12m Network properties*
+* Name: signaling_grn_properties_12m.rds
+* Location: results/intermediate_outputs/05_grn/
+*AD enriched gene targeting*
+* Name: filtered_targeting_ad.rds
+* Location: results/intermediate_outputs/07_gene_targeting/
+*TF activity*
+* Names: 
+  1. excitatory_tf_activity.rds
+  2. inhibitory_tf_activity.rds
+* Location: results/final_outputs/05_bio_activity/
+
+__Analysis Plan__:
+* Load necessary packages
+* Load data
+* Compile 12m mediators
+* Plot individual panels:
+  * A: Heatmap of differential gene targeting of signaling mediators
+        * Only include mediators who are in top or bottom quartile
+        * They are the most up- or down-regulated
+  * B: Heatmap of TF activity of mediators that are TFs
+* Compile figure 6
+* Save figure 6
+* Plot figure S5:
+  * Dotplot of global diff targeting to give context to mediator targeting
+* Save figure S5
+
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# set seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(tidyverse)
+  library(ggalluvial)
+  library(ComplexHeatmap)
+  library(circlize)
+  library(RColorBrewer)
+  library(igraph)
+  library(patchwork)
+  library(cowplot)
+  library(ggpubr)
+  library(here)
+  library(styler)
+  library(lintr)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+# AD gene list
+ad_genes <- read_rds(here("doc", "ad_genes_mm.rds"))
+
+# Load signaling network properties
+network_properties_12m <- read_rds(here(
+  "results",
+  "intermediate_outputs",
+  "05_grn",
+  "signaling_grn_properties_12m.rds"
+))
+
+# AD enriched gene targeting
+filtered_ad <- readRDS(here(
+  "results",
+  "intermediate_outputs",
+  "07_gene_targeting",
+  "filtered_targeting_ad.rds"
+))
+
+# TF activity
+tf_acts_ex <- readRDS(here(
+  "results",
+  "final_outputs",
+  "05_bio_activity",
+  "excitatory_tf_activity.rds"
+)) %>%
+  mutate(cell_type = "Excitatory Neurons")
+
+tf_acts_in <- readRDS(here(
+  "results",
+  "final_outputs",
+  "05_bio_activity",
+  "inhibitory_tf_activity.rds"
+)) %>%
+  mutate(cell_type = "Inhibitory Neurons")
+```
+
+## Figure 6A
+# Create vector of 12m mediators
+```{r}
+properties_12m_filt <- get_mediators(network_properties_12m)
+
+meds_all <- c(properties_12m_filt$meds_in, properties_12m_filt$meds_ex)
+```
+
+# Filter AD enriched scores by mediators
+```{r}
+mediator_df <- filtered_ad %>%
+  filter(gene %in% meds_all)
+```
+
+# Plot Figure 6A
+```{r}
+# prepare matrix for plotting
+meds_df <- pivot_wider(mediator_df,
+  names_from = gene,
+  values_from = targeting_score
+) %>%
+  column_to_rownames("cell_type")
+
+# Replace NAs with 0 (= not enriched genes, but needed for plotting)
+meds_df[is.na(meds_df)] <- 0
+
+# Convert to matrix
+meds_mat <- as.matrix(meds_df)
+
+# prepare top annotation
+cell_type <- c("Excitatory Neurons", "Inhibitory Neurons")
+meta <- cell_type %>% as.data.frame()
+rownames(meta) <- c("excitatory_neurons", "inhibitory_neurons")
+colnames(meta) <- "cell_type"
+
+# Set annotation colors
+anno_cols <- list(
+  "cell_type" = c(
+    "Excitatory Neurons" = "slateblue3",
+    "Inhibitory Neurons" = "darkslategray3"
+  )
+)
+
+# Set heatmap colors and breaks
+cols <- colorRamp2(c(-250, 0, 250), rev(brewer.pal(n = 3, name = "RdBu")))
+
+# Make heatmap annotation
+anno <- HeatmapAnnotation(
+  df = meta,
+  show_annotation_name = FALSE,
+  col = anno_cols,
+  annotation_legend_param = list(
+    cell_type = list(
+      title = "Receiver",
+      direction = "horizontal",
+      labels_gp = gpar(fontface = "bold")
+    )
+  )
+)
+
+# Plot heatmap
+gene_targeting_heatmap <- Heatmap(t(meds_mat),
+  col = cols,
+  top_annotation = anno,
+  show_column_names = FALSE,
+  show_row_dend = TRUE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  row_title = "AD-enriched Signaling Mediators",
+  row_title_gp = gpar(
+    fontface = "bold",
+    fontsize = 12
+  ),
+  row_names_gp = gpar(fontface = "bold"),
+  heatmap_legend_param = list(
+    direction = "vertical",
+    title = "Gene Targeting Score",
+    labels_gp = gpar(fontface = "bold"),
+    labels = c("-400", "-200", "NE", "200", "400")
+  )
+)
+
+draw(gene_targeting_heatmap,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legend = TRUE
+)
+```
+
+# Save panel 6A
+```{r}
+# grab final figure panel
+panel_a <- grid.grabExpr(
+  draw(
+    gene_targeting_heatmap,
+    heatmap_legend_side = "right",
+    annotation_legend_side = "right",
+    merge_legend = TRUE
+  )
+)
+
+# save
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "06_gene_targeting",
+    "ad_enriched_mediator_gene_targeting.png"
+  ),
+  panel_a,
+  dpi = 300,
+  width = 7,
+  height = 5,
+  bg = "#ffffff"
+)
+```
+
+## Figure 6B
+# Combine TF activity outputs
+```{r}
+tf_acts_all <- rbind(tf_acts_ex, tf_acts_in)
+```
+
+# Filter TF activity by mediators
+```{r}
+tf_acts_all_filt <- tf_acts_all %>%
+  filter(source %in% meds_all) %>%
+  filter(condition == "12m")
+
+dim(tf_acts_all_filt) # 16 6
+```
+
+# Plot Figure 6B
+```{r}
+# prepare matrix for plotting
+mat <- tf_acts_all_filt %>%
+  select(source, score, cell_type) %>%
+  pivot_wider(
+    names_from = "source",
+    values_from = "score"
+  ) %>%
+  column_to_rownames(var = "cell_type") %>%
+  as.matrix()
+
+# prepare top annotation
+cell_type <- c("Excitatory Neurons", "Inhibitory Neurons")
+meta <- cell_type %>% as.data.frame()
+rownames(meta) <- c("Excitatory Neurons", "Inhibitory Neurons")
+colnames(meta) <- "cell_type"
+
+# Set heatmap colors and breaks
+cols <- colorRamp2(c(-2, 0, 2), brewer.pal(n = 3, name = "PRGn"))
+
+# Plot tf activity heatmap
+tf_activity_heatmap <- Heatmap(t(mat),
+  col = cols,
+  top_annotation = anno,
+  show_column_names = FALSE,
+  show_row_dend = TRUE,
+  show_column_dend = FALSE,
+  cluster_columns = FALSE,
+  cluster_rows = TRUE,
+  row_title = "Transcription Factors",
+  row_title_gp = gpar(
+    fontface = "bold",
+    fontsize = 12
+  ),
+  row_names_gp = gpar(fontface = "bold"),
+  heatmap_legend_param = list(
+    direction = "vertical",
+    title = "TF Activity",
+    labels_gp = gpar(fontface = "bold")
+  )
+)
+
+draw(tf_activity_heatmap,
+  heatmap_legend_side = "right",
+  annotation_legend_side = "right",
+  merge_legend = TRUE
+)
+```
+
+# Save panel 6B
+```{r}
+# grab figure panel
+panel_b <- grid.grabExpr(
+  draw(
+    tf_activity_heatmap,
+    heatmap_legend_side = "right",
+    annotation_legend_side = "right",
+    merge_legend = TRUE
+  )
+)
+
+# save
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "06_gene_targeting",
+    "tf_activity_heatmap_sig_meds.png"
+  ),
+  panel_b,
+  dpi = 300,
+  width = 7,
+  height = 5,
+  bg = "#ffffff"
+)
+```
+
+# Compile Figure 6
+```{r}
+fig6 <- plot_grid(panel_a,
+  panel_b,
+  labels = c("A", "B")
+)
+
+fig6
+```
+
+# Save figure 6
+```{r}
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "01_figures",
+    "figure6.png"
+  ),
+  fig6,
+  dpi = 300,
+  width = 12,
+  height = 5,
+  bg = "#ffffff"
+)
+```
+
+# Figure S5
+* Global gene targeting in receivers
+  * Will show how our mediators stack up against
+```{r}
+filtered_ad_wide <- pivot_wider(filtered_ad,
+  values_from = "targeting_score",
+  names_from = "cell_type"
+)
+
+# replace all negatives and NA with 0 for positive scores
+pos <- filtered_ad_wide %>%
+  mutate_at(vars(-gene), ~ replace(., is.na(.) | . < 0, 0))
+pos_non_zero_counts <- sapply(pos[-1], function(x) sum(x != 0))
+pos_non_zero_counts
+
+# sum diff targeting by cell type
+pos <- colSums(pos[, -1])
+
+## replace all positives and NA with 0 for negative scores
+neg <- filtered_ad_wide %>%
+  mutate_at(vars(-gene), ~ replace(., is.na(.) | . > 0, 0))
+neg_non_zero_counts <- sapply(neg[-1], function(x) sum(x != 0))
+neg_non_zero_counts
+
+## sum diff targeting by cell type
+neg <- colSums(neg[, -1])
+
+# Combine positive and negative
+data <- as.data.frame(cbind(pos, neg))
+rownames(data) <- c("Excitatory Neurons", "Inhibitory Neurons")
+data$cell_type <- rownames(data)
+data$pos_sum <- pos_non_zero_counts
+data$neg_sum <- neg_non_zero_counts
+
+data <- data[order(data$pos, decreasing = TRUE), ]
+```
+excitatory_neurons inhibitory_neurons 
+              6317               4020 
+excitatory_neurons inhibitory_neurons 
+              3559               5856 
+
+# Plot Figure S5
+```{r}
+# formatting data for plotting
+data_plot <- pivot_longer(data[, c(1:3)], cols = c(1, 2), values_to = "sum")
+data_label <- pivot_longer(data[, c(4, 5)], cols = c(1, 2), values_to = "sum")
+data_plot$num <- data_label$sum
+
+# normalize data by number of genes with enriched targeting
+data_plot$norm <- data_plot$sum / data_plot$num
+
+# set plot order
+data_plot <- arrange(data_plot, desc(norm))
+data_plot$order <- seq(1:4)
+
+# plot
+dotplot_global_targeting <- ggplot(
+  data_plot,
+  aes(
+    x = norm,
+    y = reorder(cell_type, norm)
+  )
+) +
+  geom_point(shape = 21, aes(fill = name, color = name, size = num)) +
+  theme_bw() +
+  scale_color_manual(
+    values = c(
+      "black",
+      "black"
+    ),
+    guide = FALSE
+  ) +
+  scale_fill_manual(
+    values = c(
+      "blue",
+      "tomato"
+    ),
+    labels = c(
+      "Decreased in 3xTg-AD",
+      "Increased in 3xTg-AD"
+    )
+  ) +
+  labs(fill = "Differential Gene Targeting") +
+  theme(legend.position = "right") +
+  ylab("Cell Type") +
+  xlab("Total differential targeting score") +
+  theme(axis.text.x = element_text(
+    face = "bold",
+    color = "black",
+    size = 10
+  )) +
+  theme(axis.title.x = element_text(
+    face = "bold",
+    color = "black",
+    size = 12
+  )) +
+  theme(axis.title.y = element_text(
+    face = "bold",
+    color = "black",
+    size = 12
+  )) +
+  geom_text(aes(label = num), vjust = -1, fontface = "bold") +
+  theme(axis.text.y = element_text(
+    face = "bold",
+    color = "black",
+    size = 10
+  )) +
+  guides(size = guide_legend(title = "Number of Genes")) +
+  theme(text = element_text(face = "bold")) +
+  xlim(c(-300, 300))
+
+dotplot_global_targeting
+```
+
+# Save Figure S5
+```{r}
+ggsave(
+  here(
+    "results",
+    "final_outputs",
+    "01_figures",
+    "supp_figure5.png"
+  ),
+  dotplot_global_targeting,
+  dpi = 300,
+  width = 8,
+  height = 5,
+  bg = "#ffffff"
+)
+```
+
+# Session info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.4 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] grid      stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] lintr_3.0.2           styler_1.9.1          here_1.0.1           
+ [4] ggpubr_0.6.0          cowplot_1.1.1         patchwork_1.1.2      
+ [7] igraph_1.4.2          RColorBrewer_1.1-3    circlize_0.4.15      
+[10] ComplexHeatmap_2.14.0 ggalluvial_0.12.5     lubridate_1.9.2      
+[13] forcats_1.0.0         stringr_1.5.0         dplyr_1.1.1          
+[16] purrr_1.0.1           readr_2.1.4           tidyr_1.3.0          
+[19] tibble_3.2.1          ggplot2_3.4.2         tidyverse_2.0.0      
+
+loaded via a namespace (and not attached):
+ [1] matrixStats_0.63.0  doParallel_1.0.17   rprojroot_2.0.3     R.cache_0.16.0     
+ [5] tools_4.2.3         backports_1.4.1     utf8_1.2.3          R6_2.5.1           
+ [9] BiocGenerics_0.44.0 lazyeval_0.2.2      colorspace_2.1-0    GetoptLong_1.0.5   
+[13] withr_2.5.0         tidyselect_1.2.0    processx_3.8.1      compiler_4.2.3     
+[17] textshaping_0.3.6   cli_3.6.1           Cairo_1.6-0         xml2_1.3.3         
+[21] desc_1.4.2          labeling_0.4.2      scales_1.2.1        callr_3.7.3        
+[25] systemfonts_1.0.4   digest_0.6.31       rmarkdown_2.21      R.utils_2.12.2     
+[29] pkgconfig_2.0.3     htmltools_0.5.5     fastmap_1.1.1       rlang_1.1.0        
+[33] GlobalOptions_0.1.2 rstudioapi_0.14     farver_2.1.1        shape_1.4.6        
+[37] generics_0.1.3      car_3.1-2           R.oo_1.25.0         magrittr_2.0.3     
+[41] munsell_0.5.0       S4Vectors_0.36.2    fansi_1.0.4         abind_1.4-5        
+[45] lifecycle_1.0.3     R.methodsS3_1.8.2   stringi_1.7.12      yaml_2.3.7         
+[49] carData_3.0-5       parallel_4.2.3      crayon_1.5.2        hms_1.1.3          
+[53] knitr_1.42          ps_1.7.5            pillar_1.9.0        rjson_0.2.21       
+[57] ggsignif_0.6.4      codetools_0.2-19    stats4_4.2.3        glue_1.6.2         
+[61] evaluate_0.20       rex_1.2.1           remotes_2.4.2       png_0.1-8          
+[65] vctrs_0.6.2         tzdb_0.3.0          foreach_1.5.2       gtable_0.3.3       
+[69] clue_0.3-64         xfun_0.38           broom_1.0.4         cyclocomp_1.1.0    
+[73] rstatix_0.7.2       ragg_1.2.5          iterators_1.0.14    IRanges_2.32.0     
+[77] cluster_2.1.4       timechange_0.2.0
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 5 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "figures",
+  "figure_6.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "figures",
+  "figure_6.Rmd"
+))
+```
