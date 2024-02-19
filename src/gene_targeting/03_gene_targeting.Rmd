@@ -1,0 +1,321 @@
+---
+title: "03_gene_targeting"
+author: "Tabea M. Soelter (Original code from JHW)"
+date: "2024-02-11"
+output: html_document
+---
+**Calculate differential gene targeting of signaling mediators**
+
+__Goal__: Determine differential gene targeting scores within receivers for signaling mediators between conditions from PANDA regulatory networks.
+
+__Reproducibility__:
+* GitHub: lasseignelab/230418_TS_AgingCCC
+* Docker: tsoelter/rstudio_aging_ccc
+    * Version: 1.0.3
+* HPC: Yes
+    * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
+
+__Data__:
+*PANDA GRNs*
+* Names:
+  1. excitatory_neurons_AD12.Rdata
+  2. excitatory_neurons_WT12.Rdata
+  3. inhibitory_neurons_AD12.Rdata
+  4. inhibitory_neurons_WT12.Rdata
+* Location: data/panda/
+ 
+__Analysis Plan__:
+* Load necessary packages 
+* Load data
+  * PANDA networks
+* Calculate gene targeting score
+* Calculate differential gene targeting score
+* Determine quartile cut-offs and filter
+* Save objects
+  * AD enriched (unfiltered)
+  * AD enriched (filtered)
+  
+# Load packages
+```{r}
+# Time tracking
+ptm <- proc.time()
+
+# Setting seed
+set.seed(42)
+
+# load packages
+suppressPackageStartupMessages({
+  library(pandaR)
+  library(tidyverse)
+  library(tibble)
+  library(data.table)
+  library(limma)
+  library(magrittr)
+  library(readr)
+  library(gprofiler2)
+  library(ggridges)
+  library(lintr)
+  library(here)
+  library(styler)
+})
+
+source(here("src", "functions_CCCin3xTgAD.R"))
+```
+
+# Load data
+```{r}
+files <- list.files(here("data", "panda"),
+  pattern = "neurons.+12",
+  full.names = TRUE
+)
+
+for (i in files) {
+  load(i)
+  reg_net <- pandaResults
+  reg_net <- reg_net@regNet
+  name <- sub(here("data/panda/"), "", i)
+  name <- sub(".Rdata*", "", name)
+  assign(paste0(name, ".regNet"), reg_net)
+  rm(pandaResults)
+  rm(reg_net)
+}
+
+# Create vector with object names
+networks <- basename(files)
+networks <- sub(".Rdata.*", "", networks)
+```
+
+# Calculate targeting score
+* The function calculating the targeting score was written by Jordan H. Whitlock
+  * I created a wrapper to be able to run multiple networks at once
+  * Detail on the function can be found in the function and in Whitlock et al. 2023
+```{r}
+lapply(networks, calculate_gene_targeting)
+```
+
+# Combine AD and WT scores
+```{r}
+# Grab cell type names (should be excitatory and inhibitory neurons)
+cell_names <- networks[grep("_WT", networks)] %>% sub("_WT.*", "", .)
+
+# Combine AD and WT scores into 1 df for each cell type
+targeting_list <- list()
+
+for (i in cell_names) {
+  x <- get(paste0(i, "_gene_targeting_WT"))
+  y <- get(paste0(i, "_gene_targeting_AD"))
+  gene_targeting <- merge(x, y, by = "gene")
+  targeting_list[[paste0("Gene_targeting_", i)]] <- gene_targeting
+}
+```
+
+# Construct AD and WT targeting matrices
+```{r}
+gene_targeting_all_ad <- construct_targeting_mat(
+  targeting_list,
+  edge_type = "ad_edge_weight_pos"
+)
+
+dim(gene_targeting_all_ad) # 19750 3
+
+gene_targeting_all_wt <- construct_targeting_mat(
+  targeting_list,
+  edge_type = "wt_edge_weight_pos"
+)
+
+dim(gene_targeting_all_wt) # 19750 3
+```
+
+# Combine all scores
+```{r warning=FALSE}
+combined <- merge(gene_targeting_all_wt,
+  gene_targeting_all_ad,
+  by = "gene"
+)
+
+# add column names and melt
+colnames(combined) <- c(
+  "gene",
+  "excitatory_neurons_wt",
+  "inhibitory_neurons_wt",
+  "excitatory_neurons_ad",
+  "inhibitory_neurons_ad"
+)
+
+combined <- melt(combined)
+
+# add cell type and condition annotation info, then combine with df
+variable_info <- t(as.data.frame(strsplit(
+  sub("(_)(?=[^_]+$)",
+    " ",
+    combined$variable,
+    perl = TRUE
+  ),
+  " "
+)))
+
+combined <- cbind(combined, variable_info)
+
+# assign column names
+colnames(combined) <- c(
+  "gene",
+  "variable_info",
+  "targeting_score",
+  "cell_type",
+  "condition"
+)
+
+dim(combined) # 79000 5
+```
+
+# Calculate differential gene targeting score
+* Calculate the difference (ad-wt) for the targeting weight where the more positive difference indicates higher gene targeting in AD
+```{r warning=FALSE}
+combined_gene_targeting <- prepare_diff_targeting(
+  gene_targeting_all_ad,
+  gene_targeting_all_wt
+)
+
+# AD enriched targeting
+cell_types <- c("excitatory_neurons", "inhibitory_neurons")
+
+ad_enriched <- calc_diff_targeting(combined_gene_targeting,
+  cell_names = cell_types
+)
+```
+
+# Determine quartiles
+* In order to categorize genes as differentially targeted, we calculate quartiles
+  * Genes in the top quartile have increased regulation compared to other genes
+  * Genes in the bottom quartile have decreased regulation
+    * Therefore, they are not "middle of of the pack"
+```{r}
+# calculate quartiles for each cell type
+quartiles <- apply(ad_enriched[, -1], 2, quantile, probs = c(0.25, 0.5, 0.75))
+
+print(quartiles) # see output below
+```
+    excitatory_neurons inhibitory_neurons
+25%           19.70247         -144.94422
+50%           67.73835          -70.64913
+75%          141.41649          -15.93067
+
+# Filter based on quartiles
+* <= Q1 and >= Q3 for each cell type
+```{r}
+# Excitatory neurons
+excitatory_neurons <- ad_enriched[, c(1, 2)]
+excitatory_neurons <- subset(excitatory_neurons,
+                             excitatory_neurons <= 19.70247 |
+                               excitatory_neurons >= 141.41649)
+colnames(excitatory_neurons) <- c("gene", "targeting_score")
+excitatory_neurons$cell_type <- "excitatory_neurons"
+
+# Inhibitory neurons
+inhibitory_neurons <- ad_enriched[, c(1, 3)]
+inhibitory_neurons <- subset(inhibitory_neurons,
+                             inhibitory_neurons <= -144.94422 |
+                               inhibitory_neurons >= -15.93067)
+colnames(inhibitory_neurons) <- c("gene", "targeting_score")
+inhibitory_neurons$cell_type <- "inhibitory_neurons"
+
+# Combine
+filtered_ad <- bind_rows(excitatory_neurons, inhibitory_neurons)
+
+dim(filtered_ad) # 19752 3
+```
+
+# Save outputs
+```{r}
+saveRDS(filtered_ad,
+  file = here(
+    "results",
+    "intermediate_outputs",
+    "07_gene_targeting",
+    "filtered_targeting_ad.rds"
+  )
+)
+
+saveRDS(ad_enriched,
+  file = here(
+    "results",
+    "intermediate_outputs",
+    "07_gene_targeting",
+    "ad_enriched.rds"
+  )
+)
+```
+
+# Session Info
+```{r}
+sessionInfo() # see output below
+```
+R version 4.2.3 (2023-03-15)
+Platform: x86_64-pc-linux-gnu (64-bit)
+Running under: Ubuntu 22.04.4 LTS
+
+Matrix products: default
+BLAS:   /usr/lib/x86_64-linux-gnu/openblas-pthread/libblas.so.3
+LAPACK: /usr/lib/x86_64-linux-gnu/openblas-pthread/libopenblasp-r0.3.20.so
+
+locale:
+ [1] LC_CTYPE=en_US.UTF-8       LC_NUMERIC=C               LC_TIME=en_US.UTF-8       
+ [4] LC_COLLATE=en_US.UTF-8     LC_MONETARY=en_US.UTF-8    LC_MESSAGES=en_US.UTF-8   
+ [7] LC_PAPER=en_US.UTF-8       LC_NAME=C                  LC_ADDRESS=C              
+[10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
+
+attached base packages:
+[1] stats     graphics  grDevices utils     datasets  methods   base     
+
+other attached packages:
+ [1] styler_1.9.1        here_1.0.1          lintr_3.0.2         ggridges_0.5.4     
+ [5] gprofiler2_0.2.1    magrittr_2.0.3      limma_3.54.2        data.table_1.14.8  
+ [9] lubridate_1.9.2     forcats_1.0.0       stringr_1.5.0       dplyr_1.1.1        
+[13] purrr_1.0.1         readr_2.1.4         tidyr_1.3.0         tibble_3.2.1       
+[17] ggplot2_3.4.2       tidyverse_2.0.0     pandaR_1.30.0       Biobase_2.58.0     
+[21] BiocGenerics_0.44.0
+
+loaded via a namespace (and not attached):
+ [1] Rcpp_1.0.10        lattice_0.21-8     ps_1.7.5           rprojroot_2.0.3   
+ [5] digest_0.6.31      utf8_1.2.3         R6_2.5.1           plyr_1.8.8        
+ [9] evaluate_0.20      httr_1.4.5         pillar_1.9.0       rlang_1.1.0       
+[13] lazyeval_0.2.2     rstudioapi_0.14    callr_3.7.3        hexbin_1.28.3     
+[17] R.utils_2.12.2     R.oo_1.25.0        RUnit_0.4.32       rmarkdown_2.21    
+[21] desc_1.4.2         htmlwidgets_1.6.2  igraph_1.4.2       munsell_0.5.0     
+[25] compiler_4.2.3     xfun_0.38          pkgconfig_2.0.3    htmltools_0.5.5   
+[29] tidyselect_1.2.0   matrixStats_0.63.0 reshape_0.8.9      fansi_1.0.4       
+[33] viridisLite_0.4.1  crayon_1.5.2       tzdb_0.3.0         withr_2.5.0       
+[37] R.methodsS3_1.8.2  grid_4.2.3         jsonlite_1.8.4     gtable_0.3.3      
+[41] lifecycle_1.0.3    scales_1.2.1       cli_3.6.1          stringi_1.7.12    
+[45] reshape2_1.4.4     remotes_2.4.2      rex_1.2.1          xml2_1.3.3        
+[49] generics_0.1.3     vctrs_0.6.2        cyclocomp_1.1.0    tools_4.2.3       
+[53] R.cache_0.16.0     glue_1.6.2         hms_1.1.3          yaml_2.3.7        
+[57] processx_3.8.1     fastmap_1.1.1      timechange_0.2.0   colorspace_2.1-0  
+[61] plotly_4.10.1      knitr_1.42
+
+# Time tracking
+```{r}
+fptm <- proc.time() - ptm
+
+# convert to minutes
+(fptm[3] / 60)
+
+# Time elapsed: 10 minutes
+```
+
+# Reproducibility
+```{r}
+# styler
+style_file(here(
+  "src",
+  "gene_targeting",
+  "03_gene_targeting.Rmd"
+))
+
+# lintr
+lint(filename = here(
+  "src",
+  "gene_targeting",
+  "03_gene_targeting.Rmd"
+))
+```
