@@ -980,21 +980,24 @@ prepare_tf_mat <- function(degs, timepoint) {
 }
 
 ## targetingCalc
-# Function by Jordan H. Whitlock (Whitlock et al. 2023)
-# function calculating targeting on panda regNet for gene and TF
+# Original function by Jordan H. Whitlock (Whitlock et al. 2023)
+# I adapted the function for my purposes
+# function calculating targeting on panda regNet for genes
 targetingCalc <- function(regNetmatrix, variable_name, edge_weight_name, condition){
   print(condition)
-  # rearrange dataframe 
-  regNetmatrix <- reshape2::melt(regNetmatrix, varnames = c("TF", "gene"), value.name = "edge_weight_name")#melting dataframe
+  # arrange dataframe 
+  regNetmatrix <- reshape2::melt(regNetmatrix, varnames = c("TF", "gene"), value.name = "edge_weight_name")
   print("dataframe melted")
-  regNetmatrix$edge_weight_name_pos <- ifelse(regNetmatrix$edge_weight_name < 0, 0, regNetmatrix$edge_weight_name) #replacing all negatives as a 0 and storing in new column
+  #replacing all negatives as a 0 and storing in new column
+  regNetmatrix$edge_weight_name_pos <- ifelse(regNetmatrix$edge_weight_name < 0, 0, regNetmatrix$edge_weight_name) 
   print("subsetting only positive edge weights")
   regNetmatrix <- regNetmatrix[,c(1,2,4)]
   regNetmatrix
   
   # calculate gene targeting
   print("calculating gene targeting")
-  Gene.targeting <- aggregate(.~gene, regNetmatrix[-1], sum) #removing TF column and calculating targeting for all edge weights and when edge weight is only positive
+  # removing TF column and calculating targeting for all edge weights and when edge weight is only positive
+  Gene.targeting <- aggregate(.~gene, regNetmatrix[-1], sum) 
   # set column names based on condition
   print("renaming columns")
   if(condition == "AD"){
@@ -1005,39 +1008,27 @@ targetingCalc <- function(regNetmatrix, variable_name, edge_weight_name, conditi
   # reassign variable 
   print("assigning variable name to object")
   variable_name <- as.character(variable_name)
+  print("returning object to environment")
   assign(paste0(variable_name, "_gene_targeting_", condition), Gene.targeting, envir = .GlobalEnv)
-  print("gene targeting calculation complete")
-  
-  # calculate TF targeting
-  print("calculating TF targeting")
-  TF.targeting <- aggregate(.~TF, regNetmatrix[-2], sum) #same as above but for TF instead of gene
-  # set column names based on condition
-  print("renaming columns")
-  if(condition == "AD"){
-    colnames(TF.targeting) <- c("TF", "ad_edge_weight_pos")
-  } else {
-    colnames(TF.targeting) <- c("TF", "wt_edge_weight_pos")
-  }
-  # reassign variable
-  print("assigning variable name to object")
-  variable_name <- as.character(variable_name)
-  assign(paste0(variable_name, "_TF_targeting_", condition), TF.targeting, envir = .GlobalEnv)
-  print("TF targeting calculation complete")
 }
 
 ## calculate_gene_targeting
-# A wrapper for gene and TF targeting calculations using JHW function targetingCalc
+# A wrapper for gene targeting calculations using adapted JHW function targetingCalc
 calculate_gene_targeting <- function(network) {
   if (grepl("_WT", network)) {
-    targetingCalc(regNetmatrix = get(paste0(network, ".regNet")), variable_name = sub("_WT.*", "", network), edge_weight_name = wt_edge_weight, condition = "WT")
+    targetingCalc(regNetmatrix = get(paste0(network, ".regNet")),
+                  variable_name = sub("_WT.*", "", network),
+                  edge_weight_name = wt_edge_weight, condition = "WT")
   } else if (grepl("_AD", network)) {
-    targetingCalc(regNetmatrix = get(paste0(network, ".regNet")), variable_name = sub("_AD.*", "", network), edge_weight_name = ad_edge_weight, condition = "AD")
+    targetingCalc(regNetmatrix = get(paste0(network, ".regNet")),
+                  variable_name = sub("_AD.*", "", network),
+                  edge_weight_name = ad_edge_weight, condition = "AD")
   }
 }
 
 ## construct_targeting_mat
 # creates targeting matrix for each cell type by condition
-# I made it a wrapper, but original code by JHW
+# Original code by co-author JHW, adapted for my own use
 construct_targeting_mat <- function(targeting_list, edge_type) {
   gene_targeting_all <- targeting_list[grep("Gene_", names(targeting_list))] %>%
     purrr::reduce(full_join, by = "gene") %>%
@@ -1053,7 +1044,6 @@ construct_targeting_mat <- function(targeting_list, edge_type) {
 }
 
 ## prepare_diff_targeting
-# A wrapper for code by JHW
 # prepares input dfs for differential gene targeting calculations
 prepare_diff_targeting <- function(gene_targeting_all_ad, gene_targeting_all_wt) {
   # ordering data the same
@@ -1083,7 +1073,8 @@ calc_diff_targeting <- function(combined_gene_targeting, cell_names) {
                                            nrow = nrow(combined_gene_targeting),
                                            ncol = 1))
   colnames(diff_gene_targeting) <- "gene"
-  diff_gene_targeting$gene <- combined_gene_targeting$gene # adding gene
+  # adding gene column
+  diff_gene_targeting$gene <- combined_gene_targeting$gene 
   
   
   for (i in cell_names) {
@@ -1092,7 +1083,8 @@ calc_diff_targeting <- function(combined_gene_targeting, cell_names) {
     )[startsWith(names(combined_gene_targeting), i)]
     # Check there are two columns with the specified prefix
     if (length(selected_columns) == 2) {
-      diff_col <- combined_gene_targeting[[selected_columns[1]]] - combined_gene_targeting[[selected_columns[2]]] # ensure difference is `ad - control` here
+      # ensure difference is `ad - control` here
+      diff_col <- combined_gene_targeting[[selected_columns[1]]] - combined_gene_targeting[[selected_columns[2]]] 
       # Create a new column name
       diff_colname <- paste0(i)
       # Add the result to the result dataframe

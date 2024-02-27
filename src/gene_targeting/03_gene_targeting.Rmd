@@ -1,6 +1,6 @@
 ---
 title: "03_gene_targeting"
-author: "Tabea M. Soelter (Original code from JHW)"
+author: "Tabea M. Soelter & Jordan H. Whitlock"
 date: "2024-02-11"
 output: html_document
 ---
@@ -86,9 +86,6 @@ networks <- sub(".Rdata.*", "", networks)
 ```
 
 # Calculate targeting score
-* The function calculating the targeting score was written by Jordan H. Whitlock
-  * I created a wrapper to be able to run multiple networks at once
-  * Detail on the function can be found in the function and in Whitlock et al. 2023
 ```{r}
 lapply(networks, calculate_gene_targeting)
 ```

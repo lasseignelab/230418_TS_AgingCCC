@@ -22,9 +22,6 @@ module load Singularity/3.5.2-GCC-5.4.0-2.26
 # variables
 wd="${USER_DATA}/projects/230418_TS_AgingCCC/"
 
-export SINGULARITYENV_PASSWORD='pass'
-export SINGULARITYENV_USER=${USER}
-
 # change working directory
 cd ${wd}
 
@@ -34,4 +31,6 @@ SAMPLE_ARRAY=(`cat ${SAMPLE_LIST}`)
 INPUT=`echo ${SAMPLE_ARRAY[$SLURM_ARRAY_TASK_ID]}`
 
 # execute array
-singularity exec --cleanenv --containall -B ${wd} ${wd}/bin/docker/setbp1_manuscript_panda_1.0.1_latest.sif Rscript --vanilla ${wd}/src/gene_targeting/02_PANDA.R ${INPUT} ${wd}
+singularity exec --cleanenv --containall -B ${wd} ${wd}/bin/docker/setbp1_manuscript_panda_1.0.1_latest.sif \
+Rscript --vanilla ${wd}/src/gene_targeting/02_PANDA.R \
+${INPUT} ${wd}
