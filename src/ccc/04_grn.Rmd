@@ -134,6 +134,8 @@ WriteXLS::WriteXLS(table_s4, here(
 ```
 
 # Convert AD gene list to mouse & save
+* Gene conversion did produce reproducible results, therefore, please load in the ad gene list we previously generated
+    * Generated and converted on: 240210
 ```{r}
 ad_genes_mm <- gorth(ad_genes,
   source_organism = "hsapiens",
@@ -142,6 +144,11 @@ ad_genes_mm <- gorth(ad_genes,
 
 # saving both converted gene sets for later use
 saveRDS(ad_genes_mm, file = here("doc", "ad_genes_mm.rds"))
+```
+
+# Load previously generated AD gene list
+```{r}
+ad_genes_mm <- readRDS(here("doc", "ad_genes_mm.rds"))
 ```
 
 # NicheNet-v2 prior
