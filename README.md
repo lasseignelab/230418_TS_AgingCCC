@@ -1,10 +1,8 @@
 README
 ================
-2024-03-07
+2024-03-08
 
 # Evaluation of altered cell-cell communication between glia and neurons in the hippocampus of 3xTg-AD mice at two time points
-
-**INSERT BIORXIV DOI/BADGE**
 
 ## Authors
 
@@ -110,10 +108,10 @@ Manuscript figures:
 
 ## Code and Data Availability
 
-Raw snRNA-seq data: **INSERT GEO ACCESSION**  
-Processed data: **INSERT ZENODO DOI**  
-Docker images: **INSERT ZENODO DOI**  
-GitHub Repository: **INSERT ZENODO DOI**
+Raw snRNA-seq data: **Insert GEO Accession Number**  
+Processed data: **Insert Zenodo DOI**  
+Docker images: **Insert Zenodo DOI**  
+GitHub Repository: **Insert Zenodo DOI**
 
 ## Docker
 

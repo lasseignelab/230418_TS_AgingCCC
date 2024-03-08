@@ -11,8 +11,6 @@ knitr::opts_chunk$set(echo = TRUE)
 
 # Evaluation of altered cell-cell communication between glia and neurons in the hippocampus of 3xTg-AD mice at two time points
 
-**INSERT BIORXIV DOI/BADGE**
-
 ## Authors 
 
 **Tabea M. Soelter<sup>1</sup>, Timothy C. Howton<sup>1</sup>, Elizabeth J. Wilk<sup>1</sup>, Jordan H. Whitlock<sup>1</sup>,  Amanda D. Clark<sup>1</sup>, Allison Birnbaum<sup>2</sup>, Dalton C. Patterson<sup>1</sup>, Constanza J. Cortes<sup>2</sup>, Brittany N. Lasseigne<sup>1</sup>**
@@ -69,10 +67,10 @@ fs::dir_tree("src/figures/")
 ```
 
 ## Code and Data Availability
-Raw snRNA-seq data: **INSERT GEO ACCESSION**  
-Processed data: **INSERT ZENODO DOI**  
-Docker images: **INSERT ZENODO DOI**  
-GitHub Repository: **INSERT ZENODO DOI**  
+Raw snRNA-seq data: **Insert GEO Accession Number**  
+Processed data: **Insert Zenodo DOI**  
+Docker images: **Insert Zenodo DOI**  
+GitHub Repository: **Insert Zenodo DOI**  
 
 ## Docker
 We performed analyses in docker with R versions 4.2.1 (GRN construction) and 4.2.3. (all other analyses). While individual Docker image tags are noted in every script, below is an overview of the analyses and their associated scripts:
