@@ -1,0 +1,13 @@
+[2024-03-07 18:05:50] [INFO]    [OmnipathR] Welcome to OmnipathR!
+[2024-03-07 18:05:50] [INFO]    [OmnipathR] Setting up new cache directory `/home/tsoelter/.cache/OmnipathR`.
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] Reading JSON from `/home/tsoelter/.cache/OmnipathR/cache.json` (encoding: UTF-8).
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2024-03-07 18:05:50] [INFO]    [OmnipathR] Initialized cache: `/home/tsoelter/.cache/OmnipathR`.
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] Reading JSON from `/usr/local/lib/R/site-library/OmnipathR/db/db_def.json` (encoding: UTF-8).
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] Reading JSON from `/usr/local/lib/R/site-library/OmnipathR/internal/magic_bytes.json` (encoding: UTF-8).
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] Reading JSON from `/usr/local/lib/R/site-library/OmnipathR/internal/urls.json` (encoding: UTF-8).
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] JSON validation successful: TRUE
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] Reading JSON from `/usr/local/lib/R/site-library/OmnipathR/internal/id_types.json` (encoding: UTF-8).
+[2024-03-07 18:05:50] [TRACE]   [OmnipathR] JSON validation successful: TRUE

@@ -1,34 +1,139 @@
 README
 ================
-2023-02-27
+2024-03-08
 
-**EDIT THIS DOCUMENT, NOT README.md**
-
-# README Template
-
-**\[Replace this header with your project name\]**
-
-## Purpose
-
-**\[Replace this section with the purpose of your research project.\]**
-This is an R Markdown document created for the Lasseigne Lab R Project
-Template. The project and README template are designed to create
-standardized R projects for research ongoing in the [Lasseigne Lab at
-the University of Alabama at Birmingham](https://www.lasseigne.org/)
-
-## Installation/Dependencies OR Scripts
-
-**\[if project will be a package\]** - this section should be titled
-“Installation” Include a code chunk on how to install your package
-
-**\[if project will not be a package\]** - this section should be titled
-“Dependencies” or “Scripts” Include a code chunk (if relevant) on what
-your project depends on. Include a “script tree” on how to reproduce
-your results with descriptions for all scripts
+# Evaluation of altered cell-cell communication between glia and neurons in the hippocampus of 3xTg-AD mice at two time points
 
 ## Authors
 
-List co-authors if known here.
+**Tabea M. Soelter<sup>1</sup>, Timothy C. Howton<sup>1</sup>, Elizabeth
+J. Wilk<sup>1</sup>, Jordan H. Whitlock<sup>1</sup>, Amanda D.
+Clark<sup>1</sup>, Allison Birnbaum<sup>2</sup>, Dalton C.
+Patterson<sup>1</sup>, Constanza J. Cortes<sup>2</sup>, Brittany N.
+Lasseigne<sup>1</sup>**
+
+1.  Department of Cell, Developmental and Integrative Biology, Heersink
+    School of Medicine, The University of Alabama at Birmingham,
+    Birmingham, Alabama, United States of America
+
+2.  Leonard Davis School of Gerontology, University of Southern
+    California, Los Angeles, California, United States of America
+
+## Project Overview
+
+We sequenced the hippocampus from female 3xTg-AD and wild-type (WT)
+littermates at 6 and 12 months (**Fig 1A**) to evaluate altered
+glia-neuron communication. Given how critical CCC between glia and
+neurons is for brain health and for AD pathology, we inferred
+differential CCC between 3xTg-AD and WT mice across time points and
+between these senders (astrocytes, microglia, oligodendrocytes, and
+OPCs) and receivers (excitatory and inhibitory neurons) of interest. We
+predicted differentially expressed ligand-receptor pairs and their
+downstream target genes (**Fig 1B**) and evaluated their similarity
+across cell types using the Jaccard Similarity Index (JI). We also
+assessed the global downstream effects of altered glia-neuron
+communication using pseudo bulk differential expression and functional
+enrichment analyses (**Fig 1C-D**). To determine AD-associated
+interactions, we compiled an AD risk gene set from the Molecular
+Signatures Database (MSigDB) and a recent Genome-wide association study
+(GWAS). Using gene regulatory information, we also predicted signaling
+mediators of AD-associated ligand-receptor-target pairings and
+characterized their expression, differential gene targeting, and
+transcription factor (TF) activity (**Fig 1E-F**).
+
+![alt text](results/final_outputs/01_figures/figure1.png)
+
+## Scripts
+
+Data Alignment (Cell Ranger):
+
+    ## src/cellranger/
+    ## ├── id_list.txt
+    ## ├── run_cellranger.sh
+    ## └── sample_list.txt
+
+Ambient RNA removal (SoupX):
+
+    ## src/soupX/
+    ## └── 01_ambient_RNA_removal.Rmd
+
+Pre-processing (Seurat):
+
+    ## src/seurat_preprocessing/
+    ## ├── 01_3xtgad_seurat_preprocessing.Rmd
+    ## ├── 02_3xtgad_clustering.R
+    ## ├── 02_3xtgad_clustering.sh
+    ## └── 03_3xtgad_celltype_assignment.Rmd
+
+CCC inference (MultiNicheNet), FEA (gprofiler2), and JI analyses:
+
+    ## src/ccc/
+    ## ├── 01_differential_ccc.Rmd
+    ## ├── 02_pathway_analysis_targets.Rmd
+    ## ├── 03_jaccard_similarity.Rmd
+    ## └── 04_grn.Rmd
+
+Pseudobulk and DEA analyses (DESeq2):
+
+    ## src/pseudobulk_dea/
+    ## ├── 01_pseudobulk_dea.Rmd
+    ## └── 02_dea_bio_activity.Rmd
+
+Transcription factory activity analysis (decoupleR):
+
+    ## src/bio_activity/
+    ## ├── 01_tf_activity.Rmd
+    ## └── 02_pathway_activity.Rmd
+
+GRN construction (PANDA) and gene targeting analysis:
+
+    ## src/gene_targeting/
+    ## ├── 01_input_preparation.Rmd
+    ## ├── 02_PANDA.R
+    ## ├── 02_PANDA_array.sh
+    ## └── 03_gene_targeting.Rmd
+
+Manuscript figures:
+
+    ## src/figures/
+    ## ├── figure_2.Rmd
+    ## ├── figure_3.Rmd
+    ## ├── figure_4.Rmd
+    ## ├── figure_5.Rmd
+    ## ├── figure_6.Rmd
+    ## ├── figure_S1.Rmd
+    ## ├── figure_S2.Rmd
+    ## ├── figure_S3.Rmd
+    ## └── figure_S4.Rmd
+
+## Code and Data Availability
+
+Raw snRNA-seq data: **Insert GEO Accession Number**  
+Processed data: **Insert Zenodo DOI**  
+Docker images: **Insert Zenodo DOI**  
+GitHub Repository: **Insert Zenodo DOI**
+
+## Docker
+
+We performed analyses in docker with R versions 4.2.1 (GRN construction)
+and 4.2.3. (all other analyses). While individual Docker image tags are
+noted in every script, below is an overview of the analyses and their
+associated scripts:
+
+| Docker                        | Tag    | Associated Analyses                                                            |
+|-------------------------------|--------|--------------------------------------------------------------------------------|
+| rstudio_aging_ccc             | 1.0.0  | Pre-processing                                                                 |
+| rstudio_aging_ccc             | 1.0.1  | CCC inference, FEA, JI, pseudo bulk DEA, plotting                              |
+| rstudio_aging_ccc             | 1.0.2  | CCC signaling networks, pseudo bulk DEA for TF activity, TF activity, plotting |
+| rstudio_aging_ccc             | 1.0.3  | gene targeting                                                                 |
+| setbp1_manuscript_panda_1.0.1 | latest | PANDA GRN construction                                                         |
+
+The repository for rstudio_aging_ccc Docker images can be found on
+Docker Hub at
+[tsoelter/rstudio_aging_ccc](https://hub.docker.com/r/tsoelter/rstudio_aging_ccc/tags)
+and the setbp1_manuscript_panda_1.0.1 Docker image can also be found on
+Docker Hub at
+[jordanwhitlock/setbp1_manuscript_panda_1.0.1](https://hub.docker.com/r/jordanwhitlock/setbp1_manuscript_panda_1.0.1/tags)
 
 ## Lasseigne Lab
 
@@ -38,13 +143,15 @@ List co-authors if known here.
 
 ## Funding
 
-List project funding sources.
+This work was supported in part by the UAB Lasseigne Lab funds, the NIA
+R00HG009678-04S1, the Alzheimer’s of Central Alabama Lindy Harrell
+Predoctoral Scholar Program.
 
 ## Acknowledgements
 
-List project acknowledgements.
+We would like to thank the members of the Lasseigne Lab, specifically
+Vishal H. Oza and Emma F. Jones for their valuable input throughout this
+study.
 
-## License
-
-This repository is licensed under the MIT License, see LICENSE
-documentation within this repository for more details.
+[![MIT
+License](https://img.shields.io/badge/License-MIT-green.svg)](https://choosealicense.com/licenses/mit/)

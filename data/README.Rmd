@@ -1,0 +1,19 @@
+---
+title: "README"
+output: github_document
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Data Directory Structure 
+As some files in this directory are too large to deposit on GitHub, we provide a file tree.
+
+Files in this directory are either generated using code from this project or downloaded from sources specified in our scripts. The contents of this directory are also deposited on zenodo. Details (incl. DOIs) can be found in the main repository's README.
+
+The data directory should include the following files: 
+```{r echo=FALSE}
+fs::dir_tree(".")
+```
