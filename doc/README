@@ -10,3 +10,21 @@ KEGG_ALZHEIMERS_DISEASE.v2023.2.Hs.tsv
 
 ad_gene_list.csv
 - Compiled from tables 1 & 2 in Bellenguez et. al, 2022 (doi: https://doi.org/10.1038/s41588-022-01024-z)
+
+ad_genes_mm.rds
+- AD gene set compiled from HP, KEGG, and GWAS. Converted human gene names to mouse.
+
+collectri_prior_mm.csv
+- Mouse CollecTRI prior for TF activity analyses.
+- Accessed on 240208
+
+g2m_genes_mm.rds:
+- cell cycle genes converted from human to mouse for Seurat pre-processing.
+- Genes were converted on 231219
+
+s_genes_mm.rds:
+- cell cycle genes converted from human to mouse for Seurat pre-processing.
+- Genes were converted on 231219
+
+sample_sheet.rds:
+- document with time point and condition information for each sample.
