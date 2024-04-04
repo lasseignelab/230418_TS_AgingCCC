@@ -61,6 +61,11 @@ GRN construction (PANDA) and gene targeting analysis:
 fs::dir_tree("src/gene_targeting/")
 ```
 
+Protein quantification:
+```{r echo=FALSE}
+fs::dir_tree("src/elisa/")
+```
+
 Manuscript figures:
 ```{r echo=FALSE}
 fs::dir_tree("src/figures/")
@@ -80,7 +85,7 @@ Docker | Tag | Associated Analyses
 rstudio_aging_ccc | 1.0.0 | Pre-processing
 rstudio_aging_ccc | 1.0.1 | CCC inference, FEA, JI, pseudo bulk DEA, plotting
 rstudio_aging_ccc | 1.0.2 | CCC signaling networks, pseudo bulk DEA for TF activity, TF activity, plotting
-rstudio_aging_ccc | 1.0.3 | gene targeting
+rstudio_aging_ccc | 1.0.3 | gene targeting, ELISA analysis
 setbp1_manuscript_panda_1.0.1 | latest | PANDA GRN construction
 
 The repository for rstudio_aging_ccc Docker images can be found on Docker Hub at [tsoelter/rstudio_aging_ccc](https://hub.docker.com/r/tsoelter/rstudio_aging_ccc/tags) and the setbp1_manuscript_panda_1.0.1 Docker image can also be found on Docker Hub at [jordanwhitlock/setbp1_manuscript_panda_1.0.1](https://hub.docker.com/r/jordanwhitlock/setbp1_manuscript_panda_1.0.1/tags) 

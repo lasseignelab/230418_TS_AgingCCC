@@ -1,6 +1,6 @@
 README
 ================
-2024-03-08
+2024-04-04
 
 ## Data Directory Structure
 
@@ -119,6 +119,7 @@ The data directory should include the following files:
     ## │   ├── mm10_TFmotifs.txt
     ## │   └── mm10_ppi.txt
     ## ├── README.Rmd
+    ## ├── README.md
     ## ├── ccc
     ## │   ├── 12m_signaling_igraph_objects.rds
     ## │   ├── 6m_signaling_igraph_objects.rds
@@ -130,6 +131,10 @@ The data directory should include the following files:
     ## │       ├── lr_network_mouse_21122021.rds
     ## │       ├── signaling_network_mouse_21122021.rds
     ## │       └── weighted_networks_nsga2r_final_mouse.rds
+    ## ├── elisa
+    ## │   ├── 240319_ELISA_Ab40.csv
+    ## │   ├── 240319_ELISA_Ab42.csv
+    ## │   └── 240319_ELISA_total_tau.csv
     ## ├── panda
     ## │   ├── excitatory_neurons_AD12.Rdata
     ## │   ├── excitatory_neurons_AD6.Rdata

@@ -1,6 +1,6 @@
 README
 ================
-2024-03-08
+2024-04-04
 
 # Evaluation of altered cell-cell communication between glia and neurons in the hippocampus of 3xTg-AD mice at two time points
 
@@ -93,6 +93,11 @@ GRN construction (PANDA) and gene targeting analysis:
     ## ├── 02_PANDA_array.sh
     ## └── 03_gene_targeting.Rmd
 
+Protein quantification:
+
+    ## src/elisa/
+    ## └── 01_protein_quantification.Rmd
+
 Manuscript figures:
 
     ## src/figures/
@@ -101,10 +106,10 @@ Manuscript figures:
     ## ├── figure_4.Rmd
     ## ├── figure_5.Rmd
     ## ├── figure_6.Rmd
-    ## ├── figure_S1.Rmd
     ## ├── figure_S2.Rmd
     ## ├── figure_S3.Rmd
-    ## └── figure_S4.Rmd
+    ## ├── figure_S4.Rmd
+    ## └── figure_S5.Rmd
 
 ## Code and Data Availability
 
@@ -125,7 +130,7 @@ associated scripts:
 | rstudio_aging_ccc             | 1.0.0  | Pre-processing                                                                 |
 | rstudio_aging_ccc             | 1.0.1  | CCC inference, FEA, JI, pseudo bulk DEA, plotting                              |
 | rstudio_aging_ccc             | 1.0.2  | CCC signaling networks, pseudo bulk DEA for TF activity, TF activity, plotting |
-| rstudio_aging_ccc             | 1.0.3  | gene targeting                                                                 |
+| rstudio_aging_ccc             | 1.0.3  | gene targeting, ELISA analysis                                                 |
 | setbp1_manuscript_panda_1.0.1 | latest | PANDA GRN construction                                                         |
 
 The repository for rstudio_aging_ccc Docker images can be found on
