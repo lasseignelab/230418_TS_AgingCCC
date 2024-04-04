@@ -1093,3 +1093,15 @@ calc_diff_targeting <- function(combined_gene_targeting, cell_names) {
   }
   return(diff_gene_targeting)
 }
+
+## model4pl
+# A function which calculates values for a 4PL curve for protein quantification using ELISAs
+model4pl <- function(Concentration, Background, Mid, Slope, Bmax) {
+  Bmax + ((Background - Bmax) / (1 + ((Concentration/Mid)^Slope)))
+  }
+
+## calculate_concentration
+# A function which calculates of the concentration from OD values of unknown samples from ELISAs
+calculate_concentration <- function(Background, Mid, Slope, Bmax, y) {
+  as.numeric(Mid * ((Background - Bmax)/(y - Bmax) - 1)^(1/Slope))
+}

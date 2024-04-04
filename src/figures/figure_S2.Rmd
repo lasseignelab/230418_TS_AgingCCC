@@ -1,14 +1,14 @@
 ---
 title: "figure_S2"
 author: "Tabea M. Soelter"
-date: "2024-01-19"
+date: "2024-01-17"
 output: html_document
 ---
-**Plotting Main Supplementary Figure 2**
+**Plotting Supp Figure 1**
 
-__Goal__: This is a script for generating supp figure 2 of my manuscript.
-  
-__Reproducibility__: 
+__Goal__: This is a script for generating supp figure 1 of my manuscript.
+
+__Reproducibility__:
 * GitHub: lasseignelab/230418_TS_AgingCCC
 * Docker: tsoelter/rstudio_aging_ccc
     * Version: 1.0.2
@@ -16,24 +16,20 @@ __Reproducibility__:
   * Resources: long partition (150hrs), 1 GPU, 6 CPUs, 65GB per CPU
 
 __Data__:
-*Jaccard Index outputs*
-* Name: jaccard_results_ligands.rds, jaccard_results_receptors.rds, jaccard_results_targets.rds, jaccard_receptors.rds, jaccard_targets.rds
-* Location: results/intermediate_outputs/04_ccc/
- 
+*MultiNicheNet object*
+* Name: multinichenet_output.rds
+* Location: data/ccc/
+
 __Analysis Plan__:
-* Load necessary packages 
+* Load necessary packages
 * Load data
-  * JI calculations dfs
-* Plot individual panels
-  * A: lollipop plot of JI for receptors and targets in receivers
-  * B: corr plot of JI of ligands in senders in inhibitory neurons
-  * C: corr plot of JI of receptors by senders in inhibitory neurons
-  * D: corr plot of JI of targets by senders in inhibitory neurons
-  * E: corr plot of JI of ligands in senders in excitatory neurons
-  * F: corr plot of JI of receptors by senders in excitatory neurons
-  * G: corr plot of JI of targets by senders in excitatory neurons
-* Compile figure
-* Save compiled figure and compiled corr plots
+  * MultiNicheNet object
+* Plot individual panels:
+  * A: Bar plot of interactions across all cell types
+  * B: Bar plot of prioritized interactions w cell types of interest
+  * C: Stacked bar plot of B colored by receiver cell types
+* Compile figure S2
+* Save figure
 
 # Load packages
 ```{r}
@@ -46,13 +42,9 @@ set.seed(42)
 # load packages
 suppressPackageStartupMessages({
   library(tidyverse)
-  library(multinichenetr)
   library(patchwork)
   library(cowplot)
-  library(ggcorrplot)
   library(ggpubr)
-  library(grid)
-  library(ggtext)
   library(here)
   library(styler)
   library(lintr)
@@ -63,51 +55,24 @@ source(here("src", "functions_CCCin3xTgAD.R"))
 
 # Load data
 ```{r}
-# Jaccard Similarity Index dataframes
-jaccard_results_ligands <- readRDS(here(
-  "results",
-  "intermediate_outputs",
-  "04_ccc",
-  "jaccard_ligands_senders.rds"
-))
-
-jaccard_results_receptors <- readRDS(here(
-  "results",
-  "intermediate_outputs",
-  "04_ccc",
-  "jaccard_receptors_senders.rds"
-))
-
-jaccard_results_targets <- readRDS(here(
-  "results",
-  "intermediate_outputs",
-  "04_ccc",
-  "jaccard_targets_senders.rds"
-))
-
-jaccard_receptors <- readRDS(here(
-  "results",
-  "intermediate_outputs",
-  "04_ccc",
-  "jaccard_receptors_receivers.rds"
-))
-
-jaccard_targets <- readRDS(here(
-  "results",
-  "intermediate_outputs",
-  "04_ccc",
-  "jaccard_targets_receivers.rds"
-))
+output <- readRDS(here("data", "ccc", "multinichenet_output.rds"))
 ```
 
 # Colors
 ```{r}
 colors <- c(
-  "lightblue",
-  "royalblue",
-  "darkred",
-  "darksalmon",
-  "goldenrod1"
+  `Oligodendrocytes` = "royalblue3",
+  `Microglia` = "orchid3",
+  `OPCs` = "mediumpurple1",
+  `Astrocytes` = "cornflowerblue",
+  `Excitatory Neurons` = "slateblue3",
+  `Inhibitory Neurons` = "darkslategray3",
+  `Pericytes` = "deepskyblue3",
+  `Endothelial cells` = "darkolivegreen4",
+  `Meningeal cells` = "seagreen4",
+  `Ependymal cells` = "lightcoral",
+  `Fibroblasts` = "olivedrab3",
+  `RGCs` = "violetred2"
 )
 ```
 
@@ -126,60 +91,127 @@ contrast_tbl <- tibble(
 # set receiver and sender cell types of interest
 receiver_oi <- c("Excitatory.Neurons", "Inhibitory.Neurons")
 sender_oi <- c("Astrocytes", "Microglia", "OPCs", "Oligodendrocytes")
-
-# vector of groups
-group_oi <- c("X6mAD", "X6mWT", "X12mAD", "X12mWT")
 ```
 
-# Panel S2A
+# Figure S2A
+* Bar plot of all the interactions
 ```{r}
-# add type column for filtering and plotting purposes before binding dfs
-jaccard_receptors$type <- "Receptors"
-jaccard_targets$type <- "Targets"
+# filter MultiNicheNet output
+total <- output$lr_target_prior_cor %>%
+  inner_join(output$ligand_activities_targets_DEgenes$ligand_activities %>%
+    distinct(ligand, target, direction_regulation, contrast)) %>%
+  inner_join(contrast_tbl)
 
-jaccard_all <- rbind(jaccard_receptors, jaccard_targets)
+# filter for needed columns
+total_filt <- total %>%
+  select("id_target", "sender")
 
-# generate plot
-lollipop <- jaccard_all %>%
-  ggplot() +
-  geom_linerange(
-    aes(
-      x = reorder(sender, desc(sender)),
-      ymin = 0,
-      ymax = jaccard_index,
-      colour = type
-    ),
-    position = position_dodge(width = 0.2), size = 1
-  ) +
-  geom_point(
-    aes(
-      x = reorder(sender, desc(sender)),
-      y = jaccard_index,
-      colour = type
-    ),
-    position = position_dodge(width = 0.2), size = 2
-  ) +
-  coord_flip() +
-  scale_color_manual(
-    values = c(
-      "Receptors" = "darkgreen",
-      "Targets" = "darkseagreen"
-    ),
-    name = "Type"
-  ) +
-  theme_bw() +
-  labs(x = "Sender", y = "JI") +
-  ylim(0, 0.5) +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    plot.title = element_text(size = 13, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold", size = 12),
-    legend.title = element_text(face = "bold", size = 14)
+# compile number of interactions by sender
+total_num <- total_filt %>%
+  group_by(sender) %>%
+  summarize(interactions = n_distinct(id_target)) %>%
+  mutate(type = print("total"))
+
+# replace names to remove periods
+total_num$sender <- ifelse(
+  total_num$sender == "Inhibitory.Neurons",
+  "Inhibitory Neurons",
+  ifelse(total_num$sender == "Excitatory.Neurons",
+    "Excitatory Neurons",
+    ifelse(total_num$sender == "Endothelial.cells",
+      "Endothelial cells",
+      ifelse(total_num$sender == "Meningeal.cells",
+        "Meningeal cells",
+        ifelse(total_num$sender == "Ependymal.cells",
+          "Ependymal cells", total_num$sender
+        )
+      )
+    )
   )
+)
 
-lollipop
+# plot bar plot of all interactions
+panel_a <- ggplot(total_num, aes(x = sender, y = interactions, fill = sender)) +
+  geom_bar(stat = "identity") +
+  xlab("Sender") +
+  ylab("# of all Interactions") +
+  theme_bw() +
+  geom_text(aes(label = interactions),
+    position = "stack",
+    vjust = 2,
+    fontface = "bold"
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.text = element_text(face = "bold", size = 10),
+    axis.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(face = "bold", size = 14),
+    legend.title = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(face = "bold", size = 12, color = "black")
+  ) +
+  scale_fill_manual(values = colors, name = "Sender")
+
+panel_a
+
+# save panel
+png(
+  here(
+    "results",
+    "final_outputs",
+    "03_ccc",
+    "barplot_all.png"
+  ),
+  width = 200,
+  height = 175,
+  units = "mm",
+  res = 300
+)
+panel_a
+dev.off()
+```
+
+# Figure S2B
+* Bar plot of prioritized interactions between senders and receivers of interest
+```{r}
+# filter MultiNicheNet output and select columns needed for plotting
+oi <- output$lr_target_prior_cor %>%
+  inner_join(output$ligand_activities_targets_DEgenes$ligand_activities %>%
+    distinct(ligand, target, direction_regulation, contrast)) %>%
+  inner_join(contrast_tbl) %>%
+  filter(receiver %in% receiver_oi, sender %in% sender_oi)
+
+oi_filt <- oi %>%
+  select("id_target", "sender")
+
+# aggregate interactions by sender
+oi_num <- oi_filt %>%
+  group_by(sender) %>%
+  summarize(interactions = n_distinct(id_target))
+
+# plot bar plot of interactions with specified sender and receiver cell types
+panel_b <- ggplot(oi_num, aes(x = sender, y = interactions, fill = sender)) +
+  geom_bar(stat = "identity") +
+  xlab("Sender") +
+  ylab("# of Unique Interactions") +
+  theme_bw() +
+  geom_text(aes(label = interactions),
+    position = "stack",
+    vjust = 2,
+    fontface = "bold"
+  ) +
+  theme(
+    axis.text.x = element_blank(),
+    axis.ticks.x = element_blank(),
+    legend.text = element_text(face = "bold", size = 10),
+    axis.text = element_text(face = "bold", size = 12),
+    axis.title = element_text(face = "bold", size = 14),
+    legend.title = element_text(face = "bold", size = 12),
+    axis.text.y = element_text(face = "bold", size = 12, color = "black")
+  ) +
+  scale_fill_manual(values = colors, name = "Sender")
+
+panel_b
 
 # save plot
 png(
@@ -187,479 +219,96 @@ png(
     "results",
     "final_outputs",
     "03_ccc",
-    "lollipop_JI_final.png"
+    "barplot_oi.png"
   ),
   width = 200,
   height = 175,
   units = "mm",
   res = 300
 )
-lollipop
-dev.off()
-```
-
-# Panel S2B
-```{r}
-# prepare df
-jaccard_ligands_df <- data.frame(
-  cell_types = names(jaccard_results_ligands),
-  jaccard_index = unlist(jaccard_results_ligands),
-  stringsAsFactors = FALSE
-)
-
-# separate receivers from senders
-jaccard_ligands_df <- jaccard_ligands_df %>%
-  separate(cell_types,
-    into = c(
-      "receiver",
-      "celltype1",
-      "celltype2"
-    ),
-    sep = "_"
-  )
-
-jaccard_ligands_df <- jaccard_ligands_df %>%
-  spread(
-    key = celltype2,
-    value = jaccard_index
-  )
-
-# prepare inhibitory neurons
-jaccard_ligands_in <- jaccard_ligands_df %>%
-  filter(receiver == "Inhibitory Neurons")
-
-jaccard_in_mat <- as.matrix(jaccard_ligands_in[-c(1:2)])
-rownames(jaccard_in_mat) <- jaccard_ligands_in[[2]]
-
-# plot figure
-panel_b <- ggcorrplot(jaccard_in_mat,
-  outline.color = "white",
-  lab = TRUE,
-  lab_size = 5,
-  type = "lower"
-) +
-  scale_fill_gradientn(
-    limits = c(0, 1),
-    breaks = seq(0, 1, by = 0.2),
-    colors = colors,
-    name = "JI"
-  ) +
-  theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(angle = 90, size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold"),
-    legend.title = element_text(face = "bold"),
-    panel.grid.major = element_blank()
-  ) +
-  labs(y = "Inhibitory Neurons", x = "") +
-  ggtitle("Ligands")
-
-panel_b
-
-# save figure
-png(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "corr_JI_ligands_inhibitory.png"
-  ),
-  width = 150,
-  height = 150,
-  units = "mm",
-  res = 300
-)
 panel_b
 dev.off()
 ```
 
-# Panel S2C
+# Figure S2C
+* Stacked barplot of predicted interactions colored by receiver
 ```{r}
-# prepare df same as before, this time for receptors not ligands
-jaccard_receptors_df <- data.frame(
-  cell_types = names(jaccard_results_receptors),
-  jaccard_index = unlist(jaccard_results_receptors),
-  stringsAsFactors = FALSE
+oi_filt_rec <- oi %>%
+  select("id_target", "sender", "receiver")
+
+oi_filt_rec$receiver <- ifelse(oi_filt_rec$receiver == "Excitatory.Neurons",
+  "Excitatory Neurons",
+  "Inhibitory Neurons"
 )
 
-jaccard_receptors_df <- jaccard_receptors_df %>%
-  separate(cell_types,
-    into = c(
-      "receiver",
-      "celltype1",
-      "celltype2"
-    ),
-    sep = "_"
-  )
+# aggregate interactions by sender and receiver
+oi_num_rec <- oi_filt_rec %>%
+  group_by(sender, receiver) %>%
+  summarize(interactions = n_distinct(id_target))
 
-jaccard_receptors_df <- jaccard_receptors_df %>%
-  spread(
-    key = celltype2,
-    value = jaccard_index
-  )
-# prep inhibitory neuron input
-jaccard_receptors_in <- jaccard_receptors_df %>%
-  filter(receiver == "Inhibitory Neurons")
-
-jaccard_in_mat <- as.matrix(jaccard_receptors_in[-c(1:2)])
-rownames(jaccard_in_mat) <- jaccard_receptors_in[[2]]
-
-# make and plot panel
-panel_c <- ggcorrplot(jaccard_in_mat,
-  outline.color = "white",
-  lab = TRUE,
-  lab_size = 5,
-  type = "lower"
+# plot stacked bar plot
+panel_c <- ggplot(
+  oi_num_rec,
+  aes(x = sender, y = interactions, fill = receiver)
 ) +
-  scale_fill_gradientn(
-    limits = c(0, 1),
-    breaks = seq(0, 1, by = 0.2),
-    colors = colors,
-    name = "JI"
-  ) +
+  geom_bar(stat = "identity") +
+  xlab("Sender") +
+  ylab("# of Interactions") +
   theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(angle = 90, size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold"),
-    legend.title = element_text(face = "bold"),
-    panel.grid.major = element_blank()
+  geom_text(aes(label = interactions),
+    position = "stack",
+    vjust = 2,
+    fontface = "bold"
   ) +
-  labs(x = "", y = "") +
-  ggtitle("Receptors")
+  theme(
+    legend.text = element_text(face = "bold", size = 10),
+    axis.text = element_text(face = "bold", size = 12, color = "black"),
+    axis.title = element_text(face = "bold", size = 14),
+    legend.title = element_text(face = "bold", size = 12)
+  ) +
+  scale_fill_manual(values = colors, name = "Receiver")
 
 panel_c
 
-# save panel
+# save plot
 png(
   here(
     "results",
     "final_outputs",
     "03_ccc",
-    "corr_JI_receptors_inhibitory.png"
+    "barplot_oi_by_receiver.png"
   ),
-  width = 150,
-  height = 150,
+  width = 200,
+  height = 175,
   units = "mm",
   res = 300
 )
 panel_c
-dev.off()
-```
-
-# Panel S2D
-```{r}
-# prepare as before but for targets
-jaccard_targets_df <- data.frame(
-  cell_types = names(jaccard_results_targets),
-  jaccard_index = unlist(jaccard_results_targets),
-  stringsAsFactors = FALSE
-)
-
-jaccard_targets_df <- jaccard_targets_df %>%
-  separate(cell_types,
-    into = c(
-      "receiver",
-      "celltype1",
-      "celltype2"
-    ),
-    sep = "_"
-  )
-
-jaccard_targets_df <- jaccard_targets_df %>%
-  spread(
-    key = celltype2,
-    value = jaccard_index
-  )
-
-# prep inhibitory neuron input
-jaccard_targets_in <- jaccard_targets_df %>%
-  filter(receiver == "Inhibitory Neurons")
-
-jaccard_in_mat <- as.matrix(jaccard_targets_in[-c(1:2)])
-rownames(jaccard_in_mat) <- jaccard_targets_in[[2]]
-
-# plot panel D
-panel_d <- ggcorrplot(jaccard_in_mat,
-  outline.color = "white",
-  lab = TRUE,
-  lab_size = 5,
-  type = "lower"
-) +
-  scale_fill_gradientn(
-    limits = c(0, 1),
-    breaks = seq(0, 1, by = 0.2),
-    colors = colors,
-    name = "JI"
-  ) +
-  theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(angle = 90, size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold", size = 12),
-    legend.title = element_text(face = "bold", size = 14),
-    panel.grid.major = element_blank()
-  ) +
-  labs(x = "", y = "") +
-  ggtitle("Targets")
-
-
-panel_d
-
-# save panel d
-png(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "corr_JI_targets_inhibitory.png"
-  ),
-  width = 150,
-  height = 150,
-  units = "mm",
-  res = 300
-)
-panel_d
-dev.off()
-```
-
-# Panel S2E
-```{r}
-# prep excitatory neuron input for ligands
-jaccard_ligands_ex <- jaccard_ligands_df %>%
-  filter(receiver == "Excitatory Neurons")
-
-jaccard_ex_mat <- as.matrix(jaccard_ligands_ex[-c(1:2)])
-rownames(jaccard_ex_mat) <- jaccard_ligands_ex[[2]]
-
-# plot
-panel_e <- ggcorrplot(jaccard_ex_mat,
-  outline.color = "white",
-  lab = TRUE,
-  lab_size = 5,
-  type = "lower"
-) +
-  scale_fill_gradientn(
-    limits = c(0, 1),
-    breaks = seq(0, 1, by = 0.2),
-    colors = colors,
-    name = "JI"
-  ) +
-  theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(angle = 90, size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold"),
-    legend.title = element_text(face = "bold"),
-    panel.grid.major = element_blank()
-  ) +
-  labs(y = "Excitatory Neurons", x = "") +
-  ggtitle("Ligands")
-
-panel_e
-
-# save figure
-png(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "corr_JI_ligands_excitatory.png"
-  ),
-  width = 150,
-  height = 150,
-  units = "mm",
-  res = 300
-)
-panel_e
-dev.off()
-```
-
-# Panel S2F
-```{r}
-# prep excitatory neuron input for receptors
-jaccard_receptors_ex <- jaccard_receptors_df %>%
-  filter(receiver == "Excitatory Neurons")
-
-jaccard_ex_mat <- as.matrix(jaccard_receptors_ex[-c(1:2)])
-rownames(jaccard_ex_mat) <- jaccard_receptors_ex[[2]]
-
-# plot panel f
-panel_f <- ggcorrplot(jaccard_ex_mat,
-  outline.color = "white",
-  lab = TRUE,
-  lab_size = 5,
-  type = "lower"
-) +
-  scale_fill_gradientn(
-    limits = c(0, 1),
-    breaks = seq(0, 1, by = 0.2),
-    colors = colors,
-    name = "JI"
-  ) +
-  theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(angle = 90, size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold"),
-    legend.title = element_text(face = "bold"),
-    panel.grid.major = element_blank()
-  ) +
-  labs(x = "", y = "") +
-  ggtitle("Receptors")
-
-panel_f
-
-# save panel
-png(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "corr_JI_receptors_excitatory.png"
-  ),
-  width = 150,
-  height = 150,
-  units = "mm",
-  res = 300
-)
-panel_f
-dev.off()
-```
-
-# Panel S2G
-```{r}
-# prep excitatory neuron input for targets
-jaccard_targets_ex <- jaccard_targets_df %>%
-  filter(receiver == "Excitatory Neurons")
-
-jaccard_ex_mat <- as.matrix(jaccard_targets_ex[-c(1:2)])
-rownames(jaccard_ex_mat) <- jaccard_targets_ex[[2]]
-
-# plot
-panel_g <- ggcorrplot(jaccard_ex_mat,
-  outline.color = "white",
-  lab = TRUE,
-  lab_size = 5,
-  type = "lower"
-) +
-  scale_fill_gradientn(
-    limits = c(0, 1),
-    breaks = seq(0, 1, by = 0.2),
-    colors = colors,
-    name = "JI"
-  ) +
-  theme_bw() +
-  theme(
-    axis.title.x = element_text(size = 14, face = "bold"),
-    axis.title.y = element_text(angle = 90, size = 14, face = "bold"),
-    axis.text = element_text(size = 12, face = "bold"),
-    axis.text.x = element_text(angle = 45, hjust = 1),
-    plot.title = element_text(size = 14, face = "bold", hjust = 0.5),
-    legend.text = element_text(face = "bold", size = 12),
-    legend.title = element_text(face = "bold", size = 14),
-    panel.grid.major = element_blank()
-  ) +
-  labs(x = "", y = "") +
-  ggtitle("Targets")
-
-panel_g
-
-# save panel G
-png(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "corr_JI_targets_excitatory.png"
-  ),
-  width = 150,
-  height = 150,
-  units = "mm",
-  res = 300
-)
-panel_g
 dev.off()
 ```
 
 # Compile Figure
-* Bottom 6 panels are arranged first before being combined with the lollipop plot (panel A)
 ```{r}
-bottom <- ggarrange(
-  panel_b + theme(
-    axis.title.y = element_textbox(
-      linetype = 1,
-      box.color = "darkslategray3",
-      color = "black",
-      fill = alpha("darkslategray3", alpha = 0.5),
-      orientation = "left-rotated",
-      r = grid::unit(3, "pt"),
-      padding = margin(3, 5, 2, 5)
-    ),
-    plot.margin = unit(c(0, 0.5, 0, 0.5), "cm")
-  ),
-  panel_c + theme(
-    plot.margin = unit(c(0, 0.5, 0, 0), "cm")
-  ),
-  panel_d + theme(
-    plot.margin = unit(c(0, 0.5, 0, 0), "cm")
-  ),
-  panel_e + theme(
-    plot.margin = unit(c(1, 0.5, 0, 0), "cm"),
-    axis.title.y = element_textbox(
-      linetype = 1,
-      box.color = "slateblue3",
-      color = "black",
-      fill = alpha("slateblue3", alpha = 0.5),
-      orientation = "left-rotated",
-      r = grid::unit(3, "pt"),
-      padding = margin(3, 5, 2, 5),
-      margin = margin(0, 0, 5, 0)
-    )
-  ),
-  panel_f + theme(
-    plot.margin = unit(c(1, 0.5, 0, 0), "cm")
-  ),
-  panel_g + theme(
-    plot.margin = unit(c(1, 0.5, 0, 0), "cm")
-  ),
-  ncol = 3,
-  nrow = 2,
-  common.legend = TRUE,
-  legend = "right",
-  labels = c("B", "C", "D", "E", "F", "G"),
-  align = "hv"
-)
-
-# compile the whole figure and plot
-fig_s2 <- plot_grid(lollipop,
-  bottom,
-  ncol = 1,
-  rel_heights = c(1:2),
+top <- ggarrange(panel_a,
   labels = "A"
 )
 
-fig_s2
-```
+bottom <- ggarrange(panel_b,
+  panel_c,
+  ncol = 2,
+  labels = c("B", "C"),
+  align = "h",
+  widths = c(1, 1.5)
+)
 
-# Save compiled figure
-```{r}
+fig_s2 <- ggarrange(top,
+  bottom,
+  nrow = 2
+)
+
+fig_s2
+
+# save plot
 png(
   here(
     "results",
@@ -667,34 +316,14 @@ png(
     "01_figures",
     "supp_figure2.png"
   ),
-  width = 400,
-  height = 400,
+  width = 325,
+  height = 200,
   units = "mm",
   res = 300
 )
 fig_s2
 dev.off()
 ```
-
-# Save compiled corr plots
-```{r}
-# save figure
-png(
-  here(
-    "results",
-    "final_outputs",
-    "03_ccc",
-    "corr_JI_all.png"
-  ),
-  width = 450,
-  height = 300,
-  units = "mm",
-  res = 300
-)
-bottom
-dev.off()
-```
-
 
 # Session info
 ```{r}
@@ -715,102 +344,30 @@ locale:
 [10] LC_TELEPHONE=C             LC_MEASUREMENT=en_US.UTF-8 LC_IDENTIFICATION=C       
 
 attached base packages:
-[1] grid      stats     graphics  grDevices utils     datasets  methods   base     
+[1] stats     graphics  grDevices utils     datasets  methods   base     
 
 other attached packages:
- [1] lintr_3.0.2          styler_1.9.1         here_1.0.1           ggtext_0.1.2        
- [5] ggpubr_0.6.0         ggcorrplot_0.1.4     cowplot_1.1.1        patchwork_1.1.2     
- [9] multinichenetr_1.0.3 lubridate_1.9.2      forcats_1.0.0        stringr_1.5.0       
-[13] dplyr_1.1.1          purrr_1.0.1          readr_2.1.4          tidyr_1.3.0         
-[17] tibble_3.2.1         ggplot2_3.4.2        tidyverse_2.0.0     
+ [1] ggpubr_0.6.0    lintr_3.0.2     styler_1.9.1    here_1.0.1      cowplot_1.1.1  
+ [6] patchwork_1.1.2 lubridate_1.9.2 forcats_1.0.0   stringr_1.5.0   dplyr_1.1.1    
+[11] purrr_1.0.1     readr_2.1.4     tidyr_1.3.0     tibble_3.2.1    ggplot2_3.4.2  
+[16] tidyverse_2.0.0
 
 loaded via a namespace (and not attached):
-  [1] rsvd_1.0.5                  Hmisc_5.0-1                 ica_1.0-3                  
-  [4] ps_1.7.5                    class_7.3-21                rprojroot_2.0.3            
-  [7] foreach_1.5.2               lmtest_0.9-40               crayon_1.5.2               
- [10] rbibutils_2.2.13            MASS_7.3-58.3               nlme_3.1-162               
- [13] backports_1.4.1             sva_3.46.0                  rlang_1.1.0                
- [16] XVector_0.38.0              caret_6.0-94                ROCR_1.0-11                
- [19] irlba_2.3.5.1               callr_3.7.3                 nloptr_2.0.3               
- [22] limma_3.54.2                scater_1.26.1               BiocParallel_1.32.6        
- [25] rjson_0.2.21                bit64_4.0.5                 glue_1.6.2                 
- [28] sctransform_0.4.1           processx_3.8.1              pbkrtest_0.5.2             
- [31] parallel_4.2.3              vipor_0.4.5                 spatstat.sparse_3.0-1      
- [34] AnnotationDbi_1.60.2        BiocGenerics_0.44.0         UpSetR_1.4.0               
- [37] muscat_1.12.1               spatstat.geom_3.1-0         tidyselect_1.2.0           
- [40] SummarizedExperiment_1.28.0 SeuratObject_4.1.3          fitdistrplus_1.1-8         
- [43] variancePartition_1.28.9    XML_3.99-0.14               zoo_1.8-12                 
- [46] xtable_1.8-4                magrittr_2.0.3              evaluate_0.20              
- [49] Rdpack_2.4                  scuttle_1.8.4               cli_3.6.1                  
- [52] zlibbioc_1.44.0             rstudioapi_0.14             miniUI_0.1.1.1             
- [55] sp_1.6-0                    rpart_4.1.19                aod_1.3.2                  
- [58] locfdr_1.1-8                shiny_1.7.4                 BiocSingular_1.14.0        
- [61] xfun_0.38                   clue_0.3-64                 cluster_2.1.4              
- [64] caTools_1.18.2              tidygraph_1.2.3             KEGGREST_1.38.0            
- [67] clusterGeneration_1.3.7     ggrepel_0.9.3               listenv_0.9.0              
- [70] Biostrings_2.66.0           png_0.1-8                   future_1.32.0              
- [73] ipred_0.9-14                withr_2.5.0                 bitops_1.0-7               
- [76] ggforce_0.4.1               plyr_1.8.8                  hardhat_1.3.0              
- [79] dqrng_0.3.0                 e1071_1.7-13                pROC_1.18.0                
- [82] coda_0.19-4                 pillar_1.9.0                nichenetr_2.0.4            
- [85] gplots_3.1.3                GlobalOptions_0.1.2         cachem_1.0.7               
- [88] GetoptLong_1.0.5            RUnit_0.4.32                DelayedMatrixStats_1.20.0  
- [91] vctrs_0.6.2                 ellipsis_0.3.2              generics_0.1.3             
- [94] lava_1.7.2.1                tools_4.2.3                 foreign_0.8-84             
- [97] remaCor_0.0.11              beeswarm_0.4.0              munsell_0.5.0              
-[100] tweenr_2.0.2                emmeans_1.8.5               proxy_0.4-27               
-[103] DelayedArray_0.24.0         fastmap_1.1.1               compiler_4.2.3             
-[106] abind_1.4-5                 httpuv_1.6.9                plotly_4.10.1              
-[109] GenomeInfoDbData_1.2.9      prodlim_2023.03.31          gridExtra_2.3              
-[112] glmmTMB_1.1.7               edgeR_3.40.2                lattice_0.21-8             
-[115] ggnewscale_0.4.8            deldir_1.0-6                visNetwork_2.1.2           
-[118] utf8_1.2.3                  later_1.3.0                 recipes_1.0.5              
-[121] jsonlite_1.8.4              scales_1.2.1                ScaledMatrix_1.6.0         
-[124] carData_3.0-5               pbapply_1.7-0               sparseMatrixStats_1.10.0   
-[127] estimability_1.4.1          genefilter_1.80.3           lazyeval_0.2.2             
-[130] promises_1.2.0.1            car_3.1-2                   doParallel_1.0.17          
-[133] R.utils_2.12.2              goftest_1.2-3               spatstat.utils_3.0-2       
-[136] reticulate_1.28             checkmate_2.1.0             cyclocomp_1.1.0            
-[139] rmarkdown_2.21              blme_1.0-5                  statmod_1.5.0              
-[142] Rtsne_0.16                  Biobase_2.58.0              uwot_0.1.14                
-[145] igraph_1.4.2                survival_3.5-5              numDeriv_2016.8-1.1        
-[148] yaml_2.3.7                  htmltools_0.5.5             memoise_2.0.1              
-[151] Seurat_4.3.0                locfit_1.5-9.7              graphlayouts_0.8.4         
-[154] IRanges_2.32.0              viridisLite_0.4.1           digest_0.6.31              
-[157] RhpcBLASctl_0.23-42         commonmark_1.9.0            mime_0.12                  
-[160] RSQLite_2.3.1               future.apply_1.10.0         remotes_2.4.2              
-[163] data.table_1.14.8           blob_1.2.4                  R.oo_1.25.0                
-[166] S4Vectors_0.36.2            DiagrammeR_1.0.9            labeling_0.4.2             
-[169] splines_4.2.3               Formula_1.2-5               gridtext_0.1.5             
-[172] RCurl_1.98-1.12             broom_1.0.4                 hms_1.1.3                  
-[175] colorspace_2.1-0            base64enc_0.1-3             ggbeeswarm_0.7.1           
-[178] GenomicRanges_1.50.2        shape_1.4.6                 nnet_7.3-18                
-[181] Rcpp_1.0.10                 RANN_2.6.1                  mvtnorm_1.1-3              
-[184] circlize_0.4.15             fansi_1.0.4                 tzdb_0.3.0                 
-[187] parallelly_1.35.0           ModelMetrics_1.2.2.2        R6_2.5.1                   
-[190] factoextra_1.0.7            ggridges_0.5.4              lifecycle_1.0.3            
-[193] bluster_1.8.0               ggsignif_0.6.4              minqa_1.2.5                
-[196] leiden_0.4.3                Matrix_1.5-4                desc_1.4.2                 
-[199] RcppAnnoy_0.0.20            RColorBrewer_1.1-3          iterators_1.0.14           
-[202] spatstat.explore_3.1-0      TMB_1.9.4                   gower_1.0.1                
-[205] R.cache_0.16.0              htmlwidgets_1.6.2           markdown_1.6               
-[208] beachmat_2.14.2             polyclip_1.10-4             shadowtext_0.1.2           
-[211] timechange_0.2.0            mgcv_1.8-42                 ComplexHeatmap_2.14.0      
-[214] globals_0.16.2              htmlTable_2.4.1             spatstat.random_3.1-4      
-[217] progressr_0.13.0            codetools_0.2-19            matrixStats_0.63.0         
-[220] metapod_1.6.0               randomForest_4.7-1.1        gtools_3.9.4               
-[223] prettyunits_1.1.1           SingleCellExperiment_1.20.1 R.methodsS3_1.8.2          
-[226] GenomeInfoDb_1.34.9         gtable_0.3.3                DBI_1.1.3                  
-[229] stats4_4.2.3                tensor_1.5                  httr_1.4.5                 
-[232] KernSmooth_2.23-20          stringi_1.7.12              progress_1.2.2             
-[235] reshape2_1.4.4              farver_2.1.1                annotate_1.76.0            
-[238] viridis_0.6.2               rex_1.2.1                   fdrtool_1.2.17             
-[241] timeDate_4022.108           xml2_1.3.3                  boot_1.3-28.1              
-[244] BiocNeighbors_1.16.0        lme4_1.1-32                 geneplotter_1.76.0         
-[247] scattermore_0.8             scran_1.26.2                DESeq2_1.38.3              
-[250] bit_4.0.5                   MatrixGenerics_1.10.0       spatstat.data_3.0-1        
-[253] ggraph_2.1.0                pkgconfig_2.0.3             lmerTest_3.1-3             
-[256] rstatix_0.7.2               knitr_1.42
+ [1] ps_1.7.5          rprojroot_2.0.3   digest_0.6.31     utf8_1.2.3       
+ [5] R6_2.5.1          backports_1.4.1   evaluate_0.20     pillar_1.9.0     
+ [9] rlang_1.1.0       lazyeval_0.2.2    rstudioapi_0.14   car_3.1-2        
+[13] callr_3.7.3       R.utils_2.12.2    R.oo_1.25.0       rmarkdown_2.21   
+[17] desc_1.4.2        labeling_0.4.2    munsell_0.5.0     broom_1.0.4      
+[21] compiler_4.2.3    xfun_0.38         pkgconfig_2.0.3   htmltools_0.5.5  
+[25] tidyselect_1.2.0  fansi_1.0.4       crayon_1.5.2      tzdb_0.3.0       
+[29] withr_2.5.0       R.methodsS3_1.8.2 grid_4.2.3        gtable_0.3.3     
+[33] lifecycle_1.0.3   magrittr_2.0.3    scales_1.2.1      cli_3.6.1        
+[37] stringi_1.7.12    carData_3.0-5     farver_2.1.1      ggsignif_0.6.4   
+[41] remotes_2.4.2     rex_1.2.1         xml2_1.3.3        generics_0.1.3   
+[45] vctrs_0.6.2       cyclocomp_1.1.0   tools_4.2.3       R.cache_0.16.0   
+[49] glue_1.6.2        hms_1.1.3         yaml_2.3.7        processx_3.8.1   
+[53] abind_1.4-5       fastmap_1.1.1     timechange_0.2.0  colorspace_2.1-0 
+[57] rstatix_0.7.2     knitr_1.42
 
 # Time tracking
 ```{r}
@@ -819,7 +376,7 @@ fptm <- proc.time() - ptm
 # convert to minutes
 (fptm[3] / 60)
 
-# Time elapsed: 5 minutes
+# Time elapsed: < 5 minutes
 ```
 
 # Reproducibility

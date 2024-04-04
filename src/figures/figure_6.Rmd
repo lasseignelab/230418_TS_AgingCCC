@@ -4,9 +4,9 @@ author: "Tabea M. Soelter"
 date: "2024-02-19"
 output: html_document
 ---
-**Plotting Manuscript Figure 6 and Supplementary Figure 5**
+**Plotting Manuscript Figure 6 and Supplementary Figure 6**
 
-__Goal__: This is a script for generating figure 6 of my manuscript. We are also saving supp figure 5.
+__Goal__: This is a script for generating figure 6 of my manuscript. We are also saving supp figure 6.
 
 __Reproducibility__:
 * GitHub: lasseignelab/230418_TS_AgingCCC
@@ -42,9 +42,9 @@ __Analysis Plan__:
   * B: Heatmap of TF activity of mediators that are TFs
 * Compile figure 6
 * Save figure 6
-* Plot figure S5:
+* Plot figure S6:
   * Dotplot of global diff targeting to give context to mediator targeting
-* Save figure S5
+* Save figure S6
 
 # Load packages
 ```{r}
@@ -350,7 +350,7 @@ ggsave(
 )
 ```
 
-# Figure S5
+# Figure S6
 * Global gene targeting in receivers
   * Will show how our mediators stack up against
 ```{r}
@@ -391,7 +391,7 @@ excitatory_neurons inhibitory_neurons
 excitatory_neurons inhibitory_neurons 
               3559               5856 
 
-# Plot Figure S5
+# Plot Figure S6
 ```{r}
 # formatting data for plotting
 data_plot <- pivot_longer(data[, c(1:3)], cols = c(1, 2), values_to = "sum")
@@ -471,7 +471,7 @@ ggsave(
     "results",
     "final_outputs",
     "01_figures",
-    "supp_figure5.png"
+    "supp_figure6.png"
   ),
   dotplot_global_targeting,
   dpi = 300,

@@ -6,7 +6,7 @@ output: html_document
 ---
 **Plotting Manuscript Figure 5**
 
-__Goal__: This is a script for generating figure 5 of my manuscript. We are also saving supp table 4.
+__Goal__: This is a script for generating figure 5 of my manuscript. We are also saving supp table 5.
 
 __Reproducibility__:
 * GitHub: lasseignelab/230418_TS_AgingCCC
