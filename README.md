@@ -118,7 +118,7 @@ Manuscript figures:
 ## Code and Data Availability
 
 Raw snRNA-seq data:  
-[![GEO](https://img.shields.io/badge/GEO-GSE12345-mediumseagreen.svg)](GSE261596)  
+[![GEO](https://img.shields.io/badge/GEO-GSE261596-mediumseagreen.svg)](https://www.ncbi.nlm.nih.gov/geo/query/acc.cgi?&acc=GSE261596)  
 Processed data:  
 [![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.11043321-blue)](https://zenodo.org/records/11043321)  
 Docker images:  
