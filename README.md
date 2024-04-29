@@ -120,11 +120,11 @@ Manuscript figures:
 Raw snRNA-seq data:  
 [![GEO](https://img.shields.io/badge/GEO-GSE12345-mediumseagreen.svg)](GSE261596)  
 Processed data:  
-[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.10214497-blue)](https://zenodo.org/records/11043321)  
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.11043321-blue)](https://zenodo.org/records/11043321)  
 Docker images:  
-[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.10214497-blue)](https://zenodo.org/records/11042577)  
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.11042577-blue)](https://zenodo.org/records/11042577)  
 GitHub Repository:  
-[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.10214497-blue)](https://zenodo.org/records/11043321)
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.11040825-blue)](https://zenodo.org/records/11040825)
 
 ## Docker
 
