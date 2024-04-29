@@ -1,6 +1,6 @@
 README
 ================
-2024-04-04
+2024-04-29
 
 # Evaluation of altered cell-cell communication between glia and neurons in the hippocampus of 3xTg-AD mice at two time points
 
@@ -8,8 +8,8 @@ README
 
 **Tabea M. Soelter<sup>1</sup>, Timothy C. Howton<sup>1</sup>, Elizabeth
 J. Wilk<sup>1</sup>, Jordan H. Whitlock<sup>1</sup>, Amanda D.
-Clark<sup>1</sup>, Allison Birnbaum<sup>2</sup>, Dalton C.
-Patterson<sup>1</sup>, Constanza J. Cortes<sup>2</sup>, Brittany N.
+Clark<sup>1</sup>, Allison Birnbaum<sup>1,3</sup>, Dalton C.
+Patterson<sup>1</sup>, Constanza J. Cortes<sup>1,2</sup>, Brittany N.
 Lasseigne<sup>1</sup>**
 
 1.  Department of Cell, Developmental and Integrative Biology, Heersink
@@ -18,6 +18,10 @@ Lasseigne<sup>1</sup>**
 
 2.  Leonard Davis School of Gerontology, University of Southern
     California, Los Angeles, California, United States of America
+
+3.  Department of Molecular, Cell and Developmental Biology, University
+    of California, Los Angeles, Los Angeles, California, United States
+    of America
 
 ## Project Overview
 
@@ -113,10 +117,14 @@ Manuscript figures:
 
 ## Code and Data Availability
 
-Raw snRNA-seq data: **Insert GEO Accession Number**  
-Processed data: **Insert Zenodo DOI**  
-Docker images: **Insert Zenodo DOI**  
-GitHub Repository: **Insert Zenodo DOI**
+Raw snRNA-seq data:  
+[![GEO](https://img.shields.io/badge/GEO-GSE12345-mediumseagreen.svg)](GSE261596)  
+Processed data:  
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.10214497-blue)](https://zenodo.org/records/11043321)  
+Docker images:  
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.10214497-blue)](https://zenodo.org/records/11042577)  
+GitHub Repository:  
+[![DOI](https://img.shields.io/badge/DOI-10.5281/zenodo.10214497-blue)](https://zenodo.org/records/11043321)
 
 ## Docker
 
