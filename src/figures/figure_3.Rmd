@@ -120,6 +120,9 @@ prior_num$time_point <- sub("X(\\d+m)(AD|WT)", "\\1", prior_num$group)
 # Factorize time_point column to ensure 6m comes before 12m
 prior_num$time_point <- factor(prior_num$time_point, levels = c("6m", "12m"))
 
+# Factorize condition column to ensure WT comes before AD
+prior_num$condition <- factor(prior_num$condition, levels = c("WT", "AD"))
+
 # plot grouped bar plot of interactions
 grouped_bar <- ggplot(
   data = prior_num,
